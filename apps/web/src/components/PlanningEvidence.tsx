@@ -4,6 +4,7 @@ import type { Candidate, LunarFeature, MapLayer, PSRLayer, RegionManifest, Searc
 import { SiteAnalysis } from "./SiteAnalysis";
 import { RefinedInspection } from "./RefinedInspection";
 import { ScenarioLab } from "./ScenarioLab";
+import { HorizonReview } from "./HorizonReview";
 import { ResultExplanation } from "./ResultExplanation";
 import { downloadJson, downloadTimelineCsv } from "../lib/format";
 import { downloadHtml, summaryHtml } from "../lib/planning";
@@ -53,7 +54,7 @@ export function PlanningEvidence({ site, result, terrain, manifest, psr, feature
       setTab(next); document.getElementById(`evidence-tab-${next}`)?.focus();
     }}>{label}</button>)}</div>
     <div id="evidence-panel" role="tabpanel" aria-labelledby={`evidence-tab-${tab}`} tabIndex={0}>
-      {tab === 0 && <><h3>Planning indicators and required limits</h3><p>Planning score: {site.score.toFixed(1)} / 100 under these priorities. Scores less than 2 points apart are near ties.</p><ResultExplanation site={site} result={result} /><dl className="inspection-facts"><div><dt>Terrain slope</dt><dd>{site.slope_deg.toFixed(2)}° · 100 m baseline from a 1 km output grid</dd></div><div><dt>Roughness</dt><dd>{site.roughness_m.toFixed(2)} m · same source footprint</dd></div><div><dt>PSR distance</dt><dd>{site.distance_psr_km == null ? "Unavailable in this dataset" : `${site.distance_psr_km.toFixed(3)} km`}</dd></div><div><dt>Approved-feature center distance</dt><dd>{site.distance_science_feature_km == null ? "Not selected or unavailable" : `${site.distance_science_feature_km.toFixed(3)} km`}</dd></div></dl><p>Sunlight counts any upper solar limb above the horizon. Earth visibility means the center of Earth is above modeled terrain. Neither establishes usable power, RF performance or landing safety.</p></>}
+      {tab === 0 && <><h3>Planning indicators and required limits</h3><p>Planning score: {site.score.toFixed(1)} / 100 under these priorities. Scores less than 2 points apart are near ties.</p><ResultExplanation site={site} result={result} /><dl className="inspection-facts"><div><dt>Terrain slope</dt><dd>{site.slope_deg.toFixed(2)}° · 100 m baseline from a 1 km output grid</dd></div><div><dt>Roughness</dt><dd>{site.roughness_m.toFixed(2)} m · same source footprint</dd></div><div><dt>PSR distance</dt><dd>{site.distance_psr_km == null ? "Unavailable in this dataset" : `${site.distance_psr_km.toFixed(3)} km`}</dd></div><div><dt>Approved-feature center distance</dt><dd>{site.distance_science_feature_km == null ? "Not selected or unavailable" : `${site.distance_science_feature_km.toFixed(3)} km`}</dd></div></dl><p>Sunlight counts any upper solar limb above the horizon. Earth visibility means the center of Earth is above modeled terrain. Neither establishes usable power, RF performance or landing safety.</p>{result.provenance.synthetic !== true && <HorizonReview timeline={site.timeline} />}</>}
       {(tab === 1 || tab === 2) && <SiteAnalysis site={site} result={result} section={tab === 1 ? "timeline" : "horizon"} onSampleChange={setSample} />}
       {tab === 3 && <RefinedInspection site={site} result={result} />}
       {tab === 4 && <ScenarioLab site={site} result={result} onApplyDelay={onDelay} />}

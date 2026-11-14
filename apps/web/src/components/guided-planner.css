@@ -125,3 +125,32 @@
 .mapped-site-detail { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px; border: 1px solid #405748; border-radius: 7px; margin: 12px 0; }
 .mapped-site-detail > span { font-size: 12px; }.mapped-site-count { font-size: 12px; }
 @media (max-width: 480px) { .candidate-globe { height: 720px; } }
+
+.horizon-review {
+  display: grid;
+  gap: 14px;
+  margin-block: 22px 4px;
+  padding: clamp(14px, 2.5vw, 22px);
+  border: 1px solid #4a6250;
+  border-radius: 16px;
+  background: linear-gradient(150deg, #213328, #18251f 64%);
+}
+.horizon-review h3 { margin: 0 0 6px; }
+.horizon-review p { margin: 0; }
+.horizon-review-action {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.horizon-review-action p, .horizon-review-runtime { color: #aebcb3; font-size: 12px; }
+.horizon-review .secondary-button { min-height: 40px; font-size: 13px; }
+.horizon-review-result { display: grid; gap: 9px; }
+.horizon-review summary { width: fit-content; cursor: pointer; }
+.horizon-review details > p { margin-top: 6px; }
+.horizon-review-facts {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.horizon-review-facts dd { font-weight: 600; }

@@ -4,6 +4,7 @@ import { scenarioVerdict } from "../lib/explanations";
 import { COMPARE_LIMIT, HOUR_MS, MAX_SCENARIOS, SITE_COLORS, batteryMargin, loadScenario, nextEvent, sampledEvents, scenarioKey, scenarioShareHash, scenarioWindow, visibilityRuns } from "../lib/scenarios";
 import type { Candidate } from "../lib/types";
 import type { Alternative, Audience, Scenario, ScenarioResult } from "../lib/scenarios";
+import { HorizonReview } from "./HorizonReview";
 import "./scenario-board.css";
 
 const GlobeScene = lazy(() => import("./GlobeScene").then(module => ({ default: module.GlobeScene })));
@@ -57,7 +58,7 @@ function Timeline({ rows, start, end, clock }: { rows: Scenario[]; start: number
   </section>;
 }
 
-function Charts({ row }: { row: Scenario }) {
+function Charts({ row, synthetic }: { row: Scenario; synthetic: boolean }) {
   const [capacity, setCapacity] = useState("2000"), [load, setLoad] = useState("150");
   const [area, setArea] = useState<string>(), [efficiency, setEfficiency] = useState<string>();
   const start = Date.parse(row.request.time_range.start_utc), end = Date.parse(row.request.time_range.end_utc);
@@ -93,6 +94,7 @@ function Charts({ row }: { row: Scenario }) {
   }
   return <section className="scenario-charts" aria-label={`${label(row)} charts`}>
     {plot(elevations, "Solar elevation", "Sun elevation", "Terrain horizon", "°")}
+    {!synthetic && <HorizonReview timeline={row.site.timeline} />}
     {power && <div className="guide-fields"><label className="field">Panel area (m²)<input type="number" min=".01" step=".01" value={area ?? power.assumptions.area_m2} onChange={event => setArea(event.target.value)} /></label><label className="field">Efficiency (%)<input type="number" min="1" max="100" value={efficiency ?? power.assumptions.efficiency * 100} onChange={event => setEfficiency(event.target.value)} /></label></div>}
     {plot(watts, "Solar power estimate", "Vertical tracking", "Horizontal", "W")}
     {power && factor != null && <p>Window energy estimate: {metrics[3].format(power.energy_wh * factor)} vertical tracking · {metrics[3].format(power.horizontal_energy_wh * factor)} horizontal.</p>}
@@ -101,12 +103,12 @@ function Charts({ row }: { row: Scenario }) {
   </section>;
 }
 
-export function ScenarioBoard({ result, audience, onInspect, onSummarySelection, initialRows }: {
+export function ScenarioBoard({ result, audience, onInspect, onSummarySelection, initialRows, selectInitialRows = false }: {
   result?: ScenarioResult; audience: Audience; onInspect?: (id: string) => void;
-  onSummarySelection?: (sites: Candidate[]) => void; initialRows?: Scenario[];
+  onSummarySelection?: (sites: Candidate[]) => void; initialRows?: Scenario[]; selectInitialRows?: boolean;
 }) {
   const [rows, setRows] = useState<Scenario[]>(() => initialRows ?? result?.candidates.slice(0, 4).map(site => ({ site, request: result.request, key: scenarioKey(site.id, result.request) })) ?? []);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(() => selectInitialRows ? rows.slice(0, COMPARE_LIMIT).map(row => row.key) : []);
   const [sort, setSort] = useState<Key | "start">("start");
   const [sharing, setSharing] = useState(false);
   const [addSite, setAddSite] = useState("");
@@ -239,7 +241,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
       {mapSites.length > 1 && <button className="secondary-button" aria-expanded={map} onClick={() => setMap(current => !current)}>{map ? "Hide selected locations" : "Locate selected sites on the Moon"}</button>}
       {map && mapSites.length > 1 && <div className="scenario-map"><Suspense fallback={<p role="status">Loading Moon…</p>}><GlobeScene sites={mapSites} selectedCenter={mapSites[0]} timeRange={{ start_utc: new Date(start).toISOString(), end_utc: new Date(end).toISOString() }} preparedLabel="Selected scenario locations" /></Suspense></div>}
     </section>}
-    {chartRow && <div className="scenario-chart-section"><h3>{label(chartRow)} · {utcTime(chartRow.request.time_range.start_utc)}</h3><Charts key={chartRow.key} row={chartRow} /></div>}
+    {chartRow && <div className="scenario-chart-section"><h3>{label(chartRow)} · {utcTime(chartRow.request.time_range.start_utc)}</h3><Charts key={chartRow.key} row={chartRow} synthetic={import.meta.env.VITE_LUMEN_MOCK === "1" || result?.provenance.synthetic === true || chartRow.site.id.startsWith("fixture-")} /></div>}
     {result && (!result.candidates.length || !!result.alternatives?.length) && <section className="scenario-alternatives"><h3>Try instead</h3>
       {!result.alternatives?.length ? <p>No alternatives were returned for this mission. You can edit the area, dates, or required limits and analyze again.</p> :
         <div className="scenario-alternative-grid">{result.alternatives.slice(0, 3).map(alternative => {
