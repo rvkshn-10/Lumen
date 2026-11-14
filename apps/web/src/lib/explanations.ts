@@ -164,3 +164,9 @@ export function comparisonTradeoffs(a: Candidate, b: Candidate) {
     };
   });
 }
+
+export function scenarioVerdict(metrics: { illumination_fraction: number; earth_visibility_fraction: number; longest_darkness_hours: number }) {
+  const sunlight = Math.round(metrics.illumination_fraction * 100);
+  const earth = Math.round(metrics.earth_visibility_fraction * 100);
+  return `Sunlight is available for ${sunlight}% of this window and Earth is in view for ${earth}%. The longest stretch in darkness is about ${Math.round(metrics.longest_darkness_hours)} hours.`;
+}
