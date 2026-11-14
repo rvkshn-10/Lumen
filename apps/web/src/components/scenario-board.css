@@ -102,7 +102,7 @@
   .scenario-board .scenario-table tbody th,
   .scenario-board .scenario-table tbody td { padding: 0; border: 0; }
   .scenario-board .scenario-table tbody th { grid-column: 1 / -1; grid-row: 1; padding-right: 26px; }
-  .scenario-table tbody td:first-child { grid-column: 2; grid-row: 1; justify-self: end; }
+  .scenario-table tbody td:first-child { grid-column: 2; grid-row: 1; justify-self: end; z-index: 1; }
   .scenario-table tbody td:last-child { grid-column: 1 / -1; min-width: 0; }
   .scenario-table td[data-label]::before {
     content: attr(data-label);
