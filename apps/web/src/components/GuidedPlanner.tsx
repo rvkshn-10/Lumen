@@ -158,7 +158,7 @@ export function GuidedPlanner() {
       <div className="guide-actions"><button className="secondary-button" onClick={() => go(2)}>Edit mission</button><button className="text-button" onClick={() => go(1)}>Choose another area</button></div>
     </section>}
     {inspecting && <p role="status">Loading this location’s evidence…</p>}
-    {result && modal === "site" && site && <PlanningEvidence key={`${result.search_id}-${site.id}`} site={site} result={result} terrain={terrain} manifest={manifest} psr={psr} features={features} onExplore={id => void inspect(id)} stale={stale} onDelay={hours => { update(shiftWindow(result.request, hours)); setModal(null); go(2); }} onClose={() => setModal(null)} />}
+    {result && modal === "site" && site && <PlanningEvidence key={`${result.search_id}-${site.id}`} site={site} result={result} compare={pinned} terrain={terrain} manifest={manifest} psr={psr} features={features} onExplore={id => void inspect(id)} stale={stale} onDelay={hours => { update(shiftWindow(result.request, hours)); setModal(null); go(2); }} onClose={() => setModal(null)} />}
     {result && modal === "compare" && <CompareDialog result={result} sites={result.candidates.filter(item => pinned.includes(item.id))} onClose={() => setModal(null)} />}
     {result && modal === "summary" && <MissionSummary result={result} sites={pinned.length ? result.candidates.filter(item => pinned.includes(item.id)) : site ? [site] : []} coverage={appliedCoverage} stale={stale} onClose={() => setModal(null)} />}
     {library && <MissionLibrary value={draft} scienceAvailable={!!catalog?.layers.psr_distance} onLoad={request => { update(request); go(1); }} onClose={() => setLibrary(false)} />}
