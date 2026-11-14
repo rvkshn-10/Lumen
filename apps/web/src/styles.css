@@ -2069,9 +2069,13 @@ footer .text-button {
   font-size: 10px;
   color: #91a99a;
 }
-.mission-brief > summary .subtle-badge {
-  font-size: 7px;
-  letter-spacing: 0.8px;
+.mission-brief > summary::after {
+  content: "+";
+  color: #b6d9c2;
+  font-size: 18px;
+}
+.mission-brief[open] > summary::after {
+  content: "−";
 }
 .brief-body {
   padding: 0 18px 18px;
@@ -2100,6 +2104,15 @@ footer .text-button {
 }
 .brief-actions .field-hint {
   max-width: 440px;
+}
+.copilot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+.copilot-actions > button {
+  min-height: 40px;
 }
 .brief-examples {
   display: flex;
@@ -2131,35 +2144,38 @@ footer .text-button {
   font-size: 12px;
   margin-top: 12px;
 }
-.brief-changes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-.brief-changes > span {
-  display: flex;
-  gap: 5px;
-  align-items: center;
-  padding: 5px 8px;
-  border-radius: 4px;
-  background: #2b4232;
-  color: #c8dfcd;
-  font-size: 9px;
-}
-.brief-priorities {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  font-size: 10px;
-  color: #a6beae;
-  margin-top: 14px;
-  text-transform: capitalize;
-}
 .brief-review ul {
-  font-size: 10px;
-  color: #8fae9b;
+  font-size: 12px;
+  color: #b6d9c2;
   line-height: 1.8;
   padding-left: 18px;
+}
+.copilot-draft-fields {
+  min-inline-size: 0;
+  margin: 0 0 12px;
+  border: 0;
+  padding: 0;
+}
+.copilot-draft-assumptions {
+  color: #b6d9c2;
+  font-size: 12px;
+}
+.copilot-draft-assumptions > summary,
+.copilot-explanation > summary {
+  cursor: pointer;
+}
+.copilot-explanation {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #3b4f40;
+  border-radius: 6px;
+}
+.copilot-explanation .field-hint {
+  margin: 8px 0;
+}
+.copilot-explanation-text {
+  line-height: 1.6;
+  margin: 12px 0 0;
 }
 .success-note {
   font-size: 11px;
@@ -2377,9 +2393,6 @@ footer .text-button {
   .refinement-grid {
     grid-template-columns: 1fr;
   }
-  .mission-brief > summary .subtle-badge {
-    display: none;
-  }
   .map-toolbar {
     flex-wrap: wrap;
     height: auto;
@@ -2401,9 +2414,6 @@ footer .text-button {
   .brief-actions {
     align-items: flex-start;
     flex-direction: column;
-  }
-  .brief-actions .secondary-button {
-    align-self: flex-end;
   }
   .mission-brief > summary small {
     font-size: 9px;
