@@ -11,6 +11,7 @@ import { VerifiedArea } from "./VerifiedArea";
 import { PlanningMission } from "./PlanningMission";
 import type { Audience } from "../lib/scenarios";
 import { sharedScenarios } from "../lib/scenarios";
+import { demoComparison } from "../lib/demo-comparison";
 import { SharedScenarioBoard } from "./SharedScenarioBoard";
 import { ScenarioBoard } from "./ScenarioBoard";
 import { CuratedPicker, ExperienceTools } from "./ExperienceTools";
@@ -74,7 +75,7 @@ export function GuidedPlanner() {
     return () => abort.abort();
   }, [refresh]);
   useEffect(() => () => { requestController.current?.abort(); inspectionController.current?.abort(); version.current++; }, []);
-  useEffect(() => { heading.current?.focus(); }, [step, review]);
+  useEffect(() => { heading.current?.focus(); }, [step, review, shared]);
   useEffect(() => {
     if (!catalog) return;
     const abort = new AbortController(); setCoverage(null); setCoverageError(null); setCoveragePending(true); setAcknowledged(false);
@@ -140,7 +141,7 @@ export function GuidedPlanner() {
     } catch (reason) { if (!abort.signal.aborted) setState({ phase: "failed", message: reason instanceof Error ? reason.message : "Inspection unavailable." }); }
     finally { if (!abort.signal.aborted) setInspecting(false); }
   }
-  if (shared.length) return <div className="guided-planner" id="explorer"><SharedScenarioBoard links={shared} onClose={() => {
+  if (shared.length) return <div className="guided-planner" id="explorer"><SharedScenarioBoard links={shared} demo={shared === demoComparison} audience={audience} onClose={() => {
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
     setShared([]);
   }} /></div>;
@@ -153,7 +154,11 @@ export function GuidedPlanner() {
     {loadError && <div className="guide-error" role="alert"><h2>Service waking up or coverage unavailable</h2><p>{loadError}</p><p>Your inputs are retained.</p><button className="secondary-button" onClick={() => setRefresh(value => value + 1)}>Retry loading coverage</button></div>}
     {!catalog && !loadError && <p role="status">Loading the verified coverage catalog…</p>}
     {catalog && step === 1 && <section className="guide-stage"><h2 className="sr-only" tabIndex={-1} ref={heading}>Choose an area</h2>
-      <CuratedPicker features={features} onPick={place => update({ ...draft, region: { selector_type: "circle", center: { latitude_deg: place.latitude_deg, longitude_deg_east: place.longitude_deg_east }, search_radius_km: 3 } })} />
+      <div className="scenario-tools">
+        {import.meta.env.VITE_LUMEN_MOCK !== "1" && catalog.geometry.type === "cap" &&
+          <button className="secondary-button" onClick={() => { setShared(demoComparison); window.scrollTo(0, 0); }}>Open the demo comparison</button>}
+        <CuratedPicker features={features} onPick={place => update({ ...draft, region: { selector_type: "circle", center: { latitude_deg: place.latitude_deg, longitude_deg_east: place.longitude_deg_east }, search_radius_km: 3 } })} />
+      </div>
       <VerifiedArea terrain={terrain} catalog={catalog} request={draft} features={features} outcome={coverage} pending={coveragePending} error={coverageError} onChange={update} onRetry={() => setCoverageRefresh(value => value + 1)} />
       {coverage?.status === "partial" && <label className="coverage-ack"><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} />I understand only the supported intersection will be analyzed.</label>}
       {(draft.region.search_radius_km ?? 0) > catalog.public_limits.maximum_radius_km && draft.region.selector_type !== "full_supported_region" && <p className="guide-error">Live detailed areas have a maximum {catalog.public_limits.maximum_radius_km} km radius. Edit the radius or choose the full-region demo.</p>}
