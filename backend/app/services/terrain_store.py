@@ -30,6 +30,10 @@ SCALAR_COLUMNS = (
 ROW_COLUMNS = (*SCALAR_COLUMNS, "horizons_deg", "blocker_distance_m")
 
 
+class UnknownSite(DataUnavailable):
+    """The release is available, but the requested stable location is not."""
+
+
 def digest(path: Path) -> str:
     value = hashlib.sha256()
     with path.open("rb") as stream:
@@ -260,13 +264,13 @@ class TerrainStore:
     def site(self, site_id: str) -> dict:
         match = re.fullmatch(r"lola-([+-]\d{5,6})-([+-]\d{5,6})", site_id)
         if match is None:
-            raise DataUnavailable("Unknown stable site ID")
+            raise UnknownSite("Unknown stable site ID")
         x, y = map(int, match.groups())
         tile_id = f"tile-{(x + 100000) // 20000}-{(y + 100000) // 20000}"
         arrays = self.load_tile(tile_id)
         indices = np.flatnonzero(arrays["ids"] == site_id)
         if len(indices) != 1:
-            raise DataUnavailable("Site is absent or explicitly excluded")
+            raise UnknownSite("Site is absent or explicitly excluded")
         return {key: arrays[key][indices].copy() for key in ROW_COLUMNS} | {
             "horizon_azimuth_deg": arrays["horizon_azimuth_deg"].copy()
         }

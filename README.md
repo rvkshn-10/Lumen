@@ -82,6 +82,12 @@ Source and grid conventions: [NASA SVS CGI Moon Kit](https://svs.gsfc.nasa.gov/4
 
 ## Exploration workspace
 
+The V2 Track A backend now provides power estimates, refined rise/set events,
+explicit alternatives, DTE-margin contact, four-location comparison, curated
+locations, historic replays and compact metric layers. See the
+[Track A API contract and verification guide](docs/track-a-science.md).
+These are backend capabilities for the separate experience and visualization tracks.
+
 The plan's next workflows are now available:
 
 - **Area preview**: an expandable polar coverage map selects a circle center by click or

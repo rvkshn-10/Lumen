@@ -139,7 +139,7 @@ def refined_intervals(arrays: dict, index: int, timeline: list[dict]) -> tuple[d
 
 def provenance(metadata: dict) -> dict:
     return {
-        "engine_version": "exploration-1.1.0",
+        "engine_version": "exploration-2.0.0",
         "dataset_version": metadata["dataset_version"],
         "terrain_artifacts": metadata["artifacts"],
         "terrain": metadata,
@@ -152,8 +152,8 @@ def provenance(metadata: dict) -> dict:
     }
 
 
-def site_analysis(site_id: str, request: SearchRequest) -> dict:
-    validate_search(request)
+def site_analysis(site_id: str, request: SearchRequest, *, include_alternatives: bool = True) -> dict:
+    validate_search(request, point_only=True)
     metadata, arrays = load_site(settings.data_root, site_id) if is_tiled(settings.data_root) else dataset(settings.data_root)
     arrays = with_proximity(
         arrays, request.hard_constraints.science_feature_ids, settings.data_root
@@ -165,6 +165,12 @@ def site_analysis(site_id: str, request: SearchRequest) -> dict:
     )
     times, sun, earth = body_positions(settings.kernel_root, start, end, 5)
     detail = analyze(arrays, index, times, sun, earth, timeline=True)
+    from app.services.candidate_extras import enrich
+
+    sun_distance = local_sky(float(arrays["lat_deg"][index]), float(arrays["lon_deg"][index]),
+                             float(arrays["elevation_m"][index]), sun)[2]
+    enrich(detail, request, lambda instant, body: visible_at(arrays, index, instant, body),
+           sun_distance=sun_distance)
     for row in detail["horizon"]:
         lat, lon = blocker_coordinates(
             float(arrays["lat_deg"][index]),
@@ -196,7 +202,7 @@ def site_analysis(site_id: str, request: SearchRequest) -> dict:
         weights.update(illumination=0.4, earth_visibility=0.4, terrain_safety=0.2)
     total = sum(weights.values())
     weights = {key: value / total for key, value in weights.items()}
-    return {
+    result = {
         "site": site_summary(arrays, index),
         "score": 100 * sum(weights[key] * (value or 0) for key, value in scores.items()),
         "criteria_scores": scores,
@@ -213,6 +219,12 @@ def site_analysis(site_id: str, request: SearchRequest) -> dict:
             "Geometric visibility does not establish usable solar power, communications availability, or landing safety.",
         ],
     }
+    result["alternatives"] = []
+    if include_alternatives and not result["constraint_status"]["passes"]:
+        from app.services.alternatives import site_alternatives
+
+        result["alternatives"] = site_alternatives(request, arrays, index, detail["metrics"])
+    return result
 
 
 def metric_deltas(base: dict, changed: dict) -> dict:

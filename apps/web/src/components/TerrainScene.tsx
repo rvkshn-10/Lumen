@@ -9,20 +9,37 @@ import type {
   MapLayer,
   PSRLayer,
   LunarFeature,
+  TimeSample,
 } from "../lib/types";
 import { SceneBoundary } from "./SceneBoundary";
 import { SceneLabel } from "./SceneLabel";
+import {
+  BLOCKED_COLOR, BODY_COLORS, COMPARE_COLORS, SUITABILITY_COLORS, SUITABILITY_LABELS,
+  blockerAt, groundDirection, horizonAt, sampleIndexAt, suitabilityClass, type Body,
+} from "../lib/sky-geometry";
+import { dumpRow, registerSceneDump } from "../lib/scene-parity";
+
+/** Terrain heights are drawn 1.5× so relief reads; sight lines and the Sun use the same factor. */
+const HEIGHT_SCALE = 1.5;
 
 interface LayerOptions {
   previewPoint?: boolean;
   onPick?: (x_m: number, y_m: number) => void;
   studyArea?: { x_m: number; y_m: number; radius_m: number };
+  /** Current scene time: lights the terrain from the real Sun and drives sight lines and pin status. */
+  sample?: TimeSample;
+  /** Up to four candidate ids drawn in the compare colours (Okabe–Ito). */
+  compare?: string[];
   layer: MapLayer;
   mapCandidates: MapCandidate[];
   psr: PSRLayer | null;
   features: LunarFeature[];
 }
 function pointColor(point: MapCandidate, layer: MapLayer) {
+  if (layer === "suitability") {
+    const cls = point.suitability_class ?? suitabilityClass(point.score);
+    return new THREE.Color(cls === -1 ? "#3a3f3e" : SUITABILITY_COLORS[cls]);
+  }
   const value =
     layer === "illumination"
       ? point.illumination_fraction
@@ -148,6 +165,114 @@ function heightAt(terrain: TerrainData, x: number, y: number) {
   return terrain.elevations_m[row * terrain.width + col] ?? 0;
 }
 
+/** Scene-space direction (x east-ish, y up, z = −projected y) toward a body, with the terrain's height scale. */
+function sceneDirection(longitudeDeg: number, azimuthDeg: number, elevationDeg: number) {
+  const [gx, gy] = groundDirection(longitudeDeg, azimuthDeg);
+  const up = Math.tan((Math.max(-80, Math.min(80, elevationDeg)) * Math.PI) / 180) * HEIGHT_SCALE;
+  return new THREE.Vector3(gx, up, -gy).normalize();
+}
+
+/** Light the terrain from where the Sun really is at this time, with cast shadows. */
+function SunLight({ terrain, sample, longitudeDeg }: { terrain: TerrainData; sample: TimeSample; longitudeDeg: number }) {
+  const [xmin, ymin, xmax, ymax] = terrain.extent_m;
+  const cx = (xmin + xmax) / 2000, cz = -(ymin + ymax) / 2000;
+  const half = Math.max(xmax - xmin, ymax - ymin) / 2000 * 1.2;
+  // Keep the light a hair above the ground plane so a grazing Sun still shades slopes.
+  const dir = sceneDirection(longitudeDeg, sample.sun_azimuth_deg, Math.max(.4, sample.sun_elevation_deg));
+  const position = new THREE.Vector3(cx, 0, cz).add(dir.clone().multiplyScalar(half * 2));
+  const target = useMemo(() => new THREE.Object3D(), []);
+  target.position.set(cx, 0, cz);
+  const up = sample.sun_elevation_deg > -1;
+  return <>
+    <primitive object={target} />
+    <directionalLight castShadow position={position} target={target} intensity={up ? 2.6 : .35} color="#fff4dc"
+      shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-bias={-0.0004} shadow-normalBias={0.04}
+      shadow-camera-left={-half} shadow-camera-right={half} shadow-camera-top={half} shadow-camera-bottom={-half}
+      shadow-camera-near={0.1} shadow-camera-far={half * 5} />
+  </>;
+}
+
+/**
+ * Lines from a site toward the Sun and Earth. In view: a solid line in the
+ * body's colour. Blocked: a dashed grey line that stops on the ridge that
+ * blocks it (the sampled blocker from the horizon profile), with a marker.
+ */
+function SightLines({ terrain, site, sample, base, markerSize }: { terrain: TerrainData; site: Candidate; sample: TimeSample; base: number; markerSize?: number }) {
+  const [xmin, ymin, xmax, ymax] = terrain.extent_m;
+  const spanKm = Math.max(xmax - xmin, ymax - ymin) / 1000;
+  const m = markerScale(terrain, markerSize);
+  const origin = new THREE.Vector3(site.x_m / 1000, ((heightAt(terrain, site.x_m, site.y_m) - base) / 1000) * HEIGHT_SCALE + .14, -site.y_m / 1000);
+  const profile = site.horizon.map(h => h.elevation_deg);
+  const lines = (["sun", "earth"] as const).map(body => {
+    const az = body === "sun" ? sample.sun_azimuth_deg : sample.earth_azimuth_deg;
+    const el = body === "sun" ? sample.sun_elevation_deg : sample.earth_elevation_deg;
+    const visible = body === "sun" ? sample.sun_visible : sample.earth_visible;
+    const dir = sceneDirection(site.longitude_deg_east, az, el);
+    if (visible) return { body, visible, points: [origin, origin.clone().add(dir.multiplyScalar(spanKm * .32))], blocker: null as THREE.Vector3 | null, far: false };
+    const ray = blockerAt(site.horizon, az);
+    const distance = ray?.distance_m ?? spanKm * 300;
+    const [gx, gy] = groundDirection(site.longitude_deg_east, az);
+    const bx = site.x_m + gx * distance, by = site.y_m + gy * distance;
+    const inside = bx >= xmin && bx <= xmax && by >= ymin && by <= ymax;
+    if (!inside) {
+      const end = origin.clone().add(dir.multiplyScalar(spanKm * .32));
+      return { body, visible, points: [origin, end], blocker: null, far: true, distance };
+    }
+    const blocker = new THREE.Vector3(bx / 1000, ((heightAt(terrain, bx, by) - base) / 1000) * HEIGHT_SCALE + .08, -by / 1000);
+    return { body, visible, points: [origin, blocker], blocker, far: false, distance };
+  });
+  useEffect(() => registerSceneDump(`terrain-sight:${site.id}`, () => [dumpRow("terrain-sight", site.id, sample, {
+    sunHorizon: horizonAt(profile, sample.sun_azimuth_deg), earthHorizon: horizonAt(profile, sample.earth_azimuth_deg),
+    sunVisible: lines[0].visible, earthVisible: lines[1].visible,
+  })]));
+  return <>{lines.map(line => <group key={line.body}>
+    <Line points={line.points} color={line.visible ? BODY_COLORS[line.body as Body] : BLOCKED_COLOR}
+      lineWidth={line.visible ? 3 : 2} dashed={!line.visible} dashSize={.35} gapSize={.25} />
+    {line.visible && <SceneLabel text={line.body === "sun" ? "To the Sun" : "To Earth"} color={BODY_COLORS[line.body as Body]}
+      position={line.points[1].clone().add(new THREE.Vector3(0, .5 * m, 0)).toArray() as [number, number, number]} width={2.2 * m} />}
+    {line.blocker && <>
+      <mesh position={line.blocker}><octahedronGeometry args={[.22 * m]} /><meshBasicMaterial color={BODY_COLORS[line.body as Body]} /></mesh>
+      <SceneLabel text={`Ridge hides ${line.body === "sun" ? "Sun" : "Earth"}`} color="#e8ece9"
+        position={line.blocker.clone().add(new THREE.Vector3(0, .7 * m, 0)).toArray() as [number, number, number]} width={3.4 * m} />
+    </>}
+    {line.far && <SceneLabel text={`${line.body === "sun" ? "Sun" : "Earth"} hidden by terrain ${((line.distance ?? 0) / 1000).toFixed(0)} km away`} color="#e8ece9"
+      position={line.points[1].clone().add(new THREE.Vector3(0, .5 * m, 0)).toArray() as [number, number, number]} width={5.2 * m} />}
+  </group>)}</>;
+}
+
+/** Pins and labels are sized for a ~40 km patch; the full cap is 200 km, so grow them with the extent. */
+function markerScale(terrain: TerrainData, override?: number) {
+  if (override) return override;
+  const spanKm = Math.max(terrain.extent_m[2] - terrain.extent_m[0], terrain.extent_m[3] - terrain.extent_m[1]) / 1000;
+  return Math.max(1, spanKm / 40);
+}
+
+/** Two small dots over a pin: Sun and Earth, lit when in view at the current time. */
+function StatusDots({ site, sample }: { site: Candidate; sample: TimeSample }) {
+  const own = site.timeline[sampleIndexAt(site.timeline, sample.time_utc)];
+  useEffect(() => registerSceneDump(`terrain-pin:${site.id}`, () => own ? [dumpRow("terrain-pin", site.id, own, {
+    sunHorizon: horizonAt(site.horizon.map(row => row.elevation_deg), own.sun_azimuth_deg),
+    earthHorizon: horizonAt(site.horizon.map(row => row.elevation_deg), own.earth_azimuth_deg),
+    sunVisible: own.sun_visible, earthVisible: own.earth_visible,
+  })] : []), [site, own]);
+  if (!own) return null;
+  return <>{(["sun", "earth"] as const).map((body, i) => {
+    const on = body === "sun" ? own.sun_visible : own.earth_visible;
+    return <mesh key={body} position={[i ? .17 : -.17, 1.15, 0]}>
+      <sphereGeometry args={[.11, 16, 12]} />
+      <meshBasicMaterial color={on ? BODY_COLORS[body] : "#3b4442"} />
+    </mesh>;
+  })}</>;
+}
+
+function SuitabilityLegend() {
+  return <div className="suitability-legend" aria-label="Suitability colour key">
+    <strong>Suitability for your priorities</strong>
+    <div>{SUITABILITY_LABELS.map((label, i) => <span key={label}><i style={{ background: SUITABILITY_COLORS[i] }} />{label}</span>)}</div>
+    <small>From the planning score: 0–25 poor · 25–50 fair · 50–75 good · 75–100 excellent</small>
+  </div>;
+}
+
 function TerrainMesh({
   terrain,
   candidates,
@@ -160,11 +285,15 @@ function TerrainMesh({
   previewPoint,
   studyArea,
   onPick,
+  sample,
+  compare = [],
+  markerSize,
 }: {
   terrain: TerrainData;
   candidates: Candidate[];
   selected: string | null;
   onSelect: (id: string) => void;
+  markerSize?: number;
 } & LayerOptions) {
   const elevation = layer === "elevation";
   const { geometry, base } = useMemo(() => {
@@ -224,7 +353,7 @@ function TerrainMesh({
   useEffect(() => () => geometry.dispose(), [geometry]);
   return (
     <group>
-      <mesh geometry={geometry} onClick={event => {
+      <mesh geometry={geometry} castShadow={!!sample} receiveShadow={!!sample} onClick={event => {
         if (!onPick || event.delta > 5 || event.button !== 0) return;
         event.stopPropagation();
         onPick(event.point.x * 1000, -event.point.z * 1000);
@@ -250,7 +379,7 @@ function TerrainMesh({
         ]}
         position={[0, -0.08, 0]}
       />
-      {["score", "illumination", "earth_visibility"].includes(layer) && (
+      {["score", "illumination", "earth_visibility", "suitability"].includes(layer) && (
         <CandidateCloud
           terrain={terrain}
           points={mapCandidates}
@@ -282,28 +411,38 @@ function TerrainMesh({
         const y =
           ((heightAt(terrain, site.x_m, site.y_m) - base) / 1000) * 1.5 + 0.12;
         const active = site.id === selected;
+        const slot = compare.indexOf(site.id);
+        const m = markerScale(terrain, markerSize);
+        const ring = slot >= 0 ? COMPARE_COLORS[slot % COMPARE_COLORS.length] : active ? "#d4ffe1" : "#92dcb6";
         return (
           <group
             key={site.id}
             position={[site.x_m / 1000, y, -site.y_m / 1000]}
+            scale={m}
           >
             <mesh rotation={[-Math.PI / 2, 0, 0]}>
-              <ringGeometry args={[0.25, 0.32, 40]} />
+              <ringGeometry args={slot >= 0 ? [0.26, 0.4, 40] : [0.25, 0.32, 40]} />
               <meshBasicMaterial
-                color={active ? "#d4ffe1" : "#92dcb6"}
+                color={ring}
                 side={THREE.DoubleSide}
               />
             </mesh>
             <SceneLabel
               text={String(site.rank).padStart(2, "0")}
               selected={active}
+              color={slot >= 0 ? ring : undefined}
               round
               position={[0, 0.65, 0]}
               width={0.7}
               onSelect={() => onSelect(site.id)}
             />
+            {sample && <StatusDots site={site} sample={sample} />}
           </group>
         );
+      })}
+      {sample && candidates.filter(site => site.id === selected && site.timeline.length).map(site => {
+        const own = site.timeline[sampleIndexAt(site.timeline, sample.time_utc)];
+        return own ? <SightLines key={site.id} terrain={terrain} site={site} sample={own} base={base} markerSize={markerSize} /> : null;
       })}
     </group>
   );
@@ -365,7 +504,7 @@ export function FlatMap({
               />
             ),
           )}
-        {["score", "illumination", "earth_visibility"].includes(layer) &&
+        {["score", "illumination", "earth_visibility", "suitability"].includes(layer) &&
           mapCandidates.map((point) => (
             <circle
               key={point.id}
@@ -446,6 +585,8 @@ export function TerrainScene({
   previewPoint,
   studyArea,
   onPick,
+  sample,
+  compare,
 }: {
   terrain: TerrainData;
   candidates: Candidate[];
@@ -472,15 +613,32 @@ export function TerrainScene({
       features={features}
     />
   );
-  if (mode === "map") return flat;
+  const legend = layer === "suitability" ? <SuitabilityLegend /> : null;
+  if (mode === "map") return <>{flat}{legend}</>;
+  const lightSite = candidates.find(site => site.id === selected) ?? candidates[0];
+  // In the time-aware evidence view, frame the selected site rather than the whole 200 km cap.
+  const focusSite = sample ? candidates.find(site => site.id === selected) : undefined;
+  let minimum = Infinity;
+  if (focusSite) for (const v of terrain.elevations_m) if (v != null && v < minimum) minimum = v;
+  const focus: [number, number, number] | undefined = focusSite
+    ? [focusSite.x_m / 1000, ((heightAt(terrain, focusSite.x_m, focusSite.y_m) - minimum) / 1000) * HEIGHT_SCALE, -focusSite.y_m / 1000]
+    : undefined;
+  // Framing a ~40 km neighbourhood: markers at 1.5× their patch size read well; the cap-wide view scales with extent.
+  const markerSize = focus ? 1.5 : undefined;
+  const sunSample = sample && lightSite?.timeline.length
+    ? lightSite.timeline[sampleIndexAt(lightSite.timeline, sample.time_utc)] ?? sample
+    : sample;
   return (
     <SceneBoundary fallback={<><p role="status">3D terrain unavailable on this device. Showing the 2D map.</p>{flat}</>}>
       <div className="terrain-3d-frame" role="img" aria-label="Interactive 3D lunar elevation terrain. Drag to orbit; scroll or pinch to zoom.">
       <Canvas
+        shadows={!!sunSample}
         frameloop="demand"
         dpr={[1, 1.7]}
         camera={{
-          position: [(terrain.extent_m[0] + terrain.extent_m[2]) / 2000 + spanKm * .7, spanKm * .65, -(terrain.extent_m[1] + terrain.extent_m[3]) / 2000 + spanKm * .8],
+          position: focus
+            ? [focus[0] + Math.min(spanKm, 40) * .45, focus[1] + Math.min(spanKm, 40) * .32, focus[2] + Math.min(spanKm, 40) * .5]
+            : [(terrain.extent_m[0] + terrain.extent_m[2]) / 2000 + spanKm * .7, spanKm * .65, -(terrain.extent_m[1] + terrain.extent_m[3]) / 2000 + spanKm * .8],
           fov: 44,
           near: 0.1,
           far: Math.max(200, spanKm * 5),
@@ -489,17 +647,23 @@ export function TerrainScene({
       >
         <color attach="background" args={["#111213"]} />
         <fog attach="fog" args={["#111213", spanKm * 2.25, spanKm * 5]} />
-        <ambientLight intensity={0.5} />
-        <directionalLight
-          position={[-12, 20, -10]}
-          intensity={2.3}
-          color="#ffffff"
-        />
-        <directionalLight
-          position={[10, 4, 15]}
-          intensity={0.35}
-          color="#ffffff"
-        />
+        {sunSample ? <>
+          {/* Earthshine-level fill so shadowed ground is dark but not black. */}
+          <ambientLight intensity={0.32} />
+          <SunLight terrain={terrain} sample={sunSample} longitudeDeg={lightSite?.longitude_deg_east ?? 0} />
+        </> : <>
+          <ambientLight intensity={0.5} />
+          <directionalLight
+            position={[-12, 20, -10]}
+            intensity={2.3}
+            color="#ffffff"
+          />
+          <directionalLight
+            position={[10, 4, 15]}
+            intensity={0.35}
+            color="#ffffff"
+          />
+        </>}
         <TerrainMesh
           previewPoint={previewPoint}
           studyArea={studyArea}
@@ -512,15 +676,20 @@ export function TerrainScene({
           mapCandidates={mapCandidates}
           psr={psr}
           features={features}
+          sample={sample}
+          compare={compare}
+          markerSize={markerSize}
         />
         <OrbitControls
           makeDefault
-          target={[(terrain.extent_m[0] + terrain.extent_m[2]) / 2000, 2, -(terrain.extent_m[1] + terrain.extent_m[3]) / 2000]}
-          minDistance={6}
+          target={focus ?? [(terrain.extent_m[0] + terrain.extent_m[2]) / 2000, 2, -(terrain.extent_m[1] + terrain.extent_m[3]) / 2000]}
+          minDistance={focus ? 1.5 : 6}
           maxDistance={Math.max(55, spanKm * 3)}
           maxPolarAngle={Math.PI / 2.05}
         />
       </Canvas>
+      {legend}
+      {sunSample && <span className="terrain-sun-note">Lit by the Sun at {sunSample.time_utc.slice(0, 16).replace("T", " ")} UTC · Sun {sunSample.sun_elevation_deg.toFixed(1)}° up · shadows move as you scrub</span>}
       <span className="terrain-interaction-hint">{onPick ? "Click surface to select · drag to orbit · height 1.5×" : "3D elevation · drag to orbit · scroll or pinch to zoom · height 1.5×"}</span>
       </div>
     </SceneBoundary>

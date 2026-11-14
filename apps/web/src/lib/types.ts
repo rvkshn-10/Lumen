@@ -56,6 +56,9 @@ export interface SearchRequest {
     science_feature_ids?: string[];
   };
   preferences: Preferences;
+  dte_margin_deg?: number;
+  power?: PowerSettings;
+  scrub_time_utc?: string | null;
 }
 export interface SearchValidationResponse {
   valid: boolean;
@@ -75,6 +78,8 @@ export interface TimeSample {
   solar_fraction: number;
   sun_visible: boolean;
   earth_visible: boolean;
+  sun_distance_km?: number;
+  dte_contact?: boolean;
 }
 export interface Candidate {
   id: string;
@@ -107,6 +112,11 @@ export interface Candidate {
     blocker_latitude_deg?: number;
     blocker_longitude_deg_east?: number;
   }[];
+  power?: PowerEstimate;
+  events?: BodyEvent[];
+  next_sunset?: BodyEvent | null;
+  next_earthset?: BodyEvent | null;
+  dte?: DTEContact;
 }
 export interface SearchResponse {
   search_id: string;
@@ -130,6 +140,8 @@ export interface SearchResponse {
   map_point_count?: number;
   failure_counts?: Record<string, number>;
   rejections?: Record<string, number>;
+  alternatives?: Alternative[];
+  suitability_legend?: { bins: number[]; labels: string[] };
 }
 
 export interface LunarFeature {
@@ -169,6 +181,8 @@ export interface MapCandidate {
   slope_deg: number;
   distance_psr_km?: number;
   criteria_scores?: Candidate["criteria_scores"];
+  /** 0–3 poor→excellent, −1 unknown (v2 contract). */
+  suitability_class?: -1 | 0 | 1 | 2 | 3;
 }
 export type MapLayer =
   | "terrain"
@@ -176,6 +190,7 @@ export type MapLayer =
   | "score"
   | "illumination"
   | "earth_visibility"
+  | "suitability"
   | "psr";
 export interface VisibilityInterval {
   start_utc: string;
@@ -213,6 +228,71 @@ export interface SiteDetail {
   request: SearchRequest;
   provenance: Record<string, unknown>;
   warnings: string[];
+  power?: PowerEstimate;
+  events?: BodyEvent[];
+  next_sunset?: BodyEvent | null;
+  next_earthset?: BodyEvent | null;
+  dte?: DTEContact;
+  alternatives?: Alternative[];
+}
+
+// V2 additions are optional on legacy responses. No missing field means zero.
+export interface PowerSettings {
+  area_m2?: number;
+  efficiency?: number;
+  load_w?: number;
+  capacity_wh?: number;
+  start_soc?: number;
+}
+export interface PowerEstimate {
+  assumptions: { area_m2: number; efficiency: number; mount: "vertical_tracking";
+    solar_constant_w_m2: number; integration?: string; excludes?: string[] };
+  series: { time_utc: string; vertical_w: number; horizontal_w: number }[];
+  energy_wh: number;
+  horizontal_energy_wh: number;
+  battery?: { min_soc_wh: number; depleted_index: number | null; load_w: number;
+    capacity_wh: number; start_soc: number };
+}
+export interface BodyEvent {
+  type: "sunrise" | "sunset" | "earthrise" | "earthset";
+  time_utc: string;
+  uncertainty_minutes: number;
+}
+export interface DTEContact {
+  margin_deg: number;
+  contact_fraction: number;
+  longest_contact_hours: number;
+  longest_blackout_hours: number;
+  definition: string;
+}
+export interface Alternative {
+  id: string;
+  suggestion_id?: string;
+  kind: "nearby" | "shifted_window" | "relaxed";
+  for_site: string;
+  resolves: string[];
+  distance_km?: number;
+  search_radius_km?: number;
+  shift_hours?: number;
+  metrics: Candidate["metrics"];
+  before_metrics?: Candidate["metrics"];
+  terrain?: Record<string, number>;
+  before_terrain?: Record<string, number>;
+  reason: string;
+  request?: SearchRequest;
+  evaluation_endpoint?: string;
+  relaxation?: { constraint: string; before: number; after: number };
+}
+export interface CuratedSite {
+  id: string;
+  name: string;
+  kind: "artemis_region" | "historic" | "feature";
+  latitude_deg: number;
+  longitude_deg_east: number;
+  landing_utc?: string;
+  analysis: "detailed" | "coarse";
+  source_url: string;
+  blurb: string;
 }
 export interface TerrainData {
   width: number;

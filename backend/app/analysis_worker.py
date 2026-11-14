@@ -23,6 +23,21 @@ def main():
             from app.global_api import GlobalAreaRequest, area_ranking_calculation
 
             result = area_ranking_calculation(GlobalAreaRequest.model_validate(payload))
+        elif sys.argv[1] == "compare":
+            from app.models import CompareRequest
+            from app.v2_api import compare_calculation
+
+            result = compare_calculation(CompareRequest.model_validate(payload))
+        elif sys.argv[1] == "replay":
+            from app.v2_api import ReplayRequest, replay_calculation
+
+            site_id = payload.pop("site_id")
+            result = replay_calculation(site_id, ReplayRequest.model_validate(payload))
+        elif sys.argv[1] == "metrics":
+            from app.models import SearchRequest
+            from app.v2_api import metrics_calculation
+
+            result = metrics_calculation(SearchRequest.model_validate(payload))
         else:
             raise ValueError("Unknown analysis operation")
         response = {"result": result}

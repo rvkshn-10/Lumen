@@ -70,11 +70,22 @@ class Preferences(StrictModel):
     science_proximity: float = Field(default=0, ge=0)
 
 
+class PowerSettings(StrictModel):
+    area_m2: float = Field(default=1, gt=0, le=10000)
+    efficiency: float = Field(default=0.30, gt=0, le=1)
+    load_w: float = Field(default=150, ge=0, le=1e7)
+    capacity_wh: float = Field(default=2000, gt=0, le=1e9)
+    start_soc: float = Field(default=1, ge=0, le=1)
+
+
 class SearchRequest(StrictModel):
     region: RegionSelection
     time_range: TimeRange
     hard_constraints: HardConstraints = Field(default_factory=HardConstraints)
     preferences: Preferences = Field(default_factory=Preferences)
+    dte_margin_deg: float = Field(default=2, ge=0, le=90)
+    power: PowerSettings = Field(default_factory=PowerSettings)
+    scrub_time_utc: datetime | None = None
 
 
 class SearchValidationResponse(StrictModel):
@@ -91,3 +102,35 @@ class ScenarioRequest(StrictModel):
     delay_hours: float = Field(default=12, ge=-168, le=168)
     offset_radius_m: float = Field(default=500, ge=0, le=2000)
     include_sampling_sensitivity: bool = True
+
+
+class CompareSite(StrictModel):
+    site_id: str | None = Field(default=None, min_length=1, max_length=100)
+    latitude_deg: float | None = Field(default=None, ge=-90, le=90)
+    longitude_deg_east: float | None = Field(default=None, ge=-180, lt=180)
+
+    @model_validator(mode="after")
+    def one_location(self):
+        if self.site_id is not None:
+            if self.latitude_deg is not None or self.longitude_deg_east is not None:
+                raise ValueError("Supply a site_id OR both coordinates.")
+        elif self.latitude_deg is None or self.longitude_deg_east is None:
+            raise ValueError("Supply a site_id OR both coordinates.")
+        return self
+
+
+class CompareRequest(StrictModel):
+    sites: list[CompareSite] = Field(min_length=1, max_length=4)
+    time_range: TimeRange
+    hard_constraints: HardConstraints = Field(default_factory=HardConstraints)
+    preferences: Preferences = Field(default_factory=Preferences)
+    dte_margin_deg: float = Field(default=2, ge=0, le=90)
+    power: PowerSettings = Field(default_factory=PowerSettings)
+    scrub_time_utc: datetime | None = None
+
+    @model_validator(mode="after")
+    def unique_sites(self):
+        identities = [(s.site_id, s.latitude_deg, s.longitude_deg_east) for s in self.sites]
+        if len(set(identities)) != len(identities):
+            raise ValueError("Choose distinct locations for comparison.")
+        return self

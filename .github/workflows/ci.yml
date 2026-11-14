@@ -30,6 +30,8 @@ jobs:
       - run: python scripts/data/prepare_kernels.py
       - run: python scripts/data/prepare_global.py
       - run: python -m pytest backend/tests
+      - name: Independent V2 verification and mutation detection
+        run: python scripts/verify/lumen_verify.py --result scripts/verify/fixtures/contract-v2.json --self-test --suites ephemeris visibility scoring physics features
       - run: python -m pytest scripts/data/test_prepare_terrain.py scripts/data/test_prepare_science_layers.py scripts/data/test_verify_cap_tiles.py scripts/data/test_install_cap_release.py
       - run: python -m ruff check backend scripts
       - run: python scripts/data/verify_manifest.py

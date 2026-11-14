@@ -28,6 +28,7 @@ RUN pip install --no-cache-dir ./backend
 COPY scripts/data/prepare_kernels.py scripts/data/prepare_kernels.py
 RUN python scripts/data/prepare_kernels.py
 COPY --from=web-build /workspace/apps/web/dist apps/web/dist
+COPY apps/web/src/data/curated-sites.json apps/web/src/data/curated-sites.json
 COPY data/derived/pgda-demo-v1 data/derived/pgda-demo-v1
 COPY --from=science-data /workspace/data/derived/global-preview-v1 data/derived/global-preview-v1
 COPY --from=science-data /workspace/data/derived/lunar-south-cap-v1 data/derived/lunar-south-cap-v1

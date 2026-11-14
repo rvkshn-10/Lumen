@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Candidate, LunarFeature, MapLayer, PSRLayer, RegionManifest, SearchResponse, TerrainData, TimeSample } from "../lib/types";
-import { Comparison } from "./CandidateResults";
 import { SiteAnalysis } from "./SiteAnalysis";
 import { RefinedInspection } from "./RefinedInspection";
 import { ScenarioLab } from "./ScenarioLab";
@@ -17,8 +16,9 @@ export function PlanningDialog({ title, onClose, children }: { title: string; on
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    dialog.current?.showModal();
-    return () => { dialog.current?.close(); previous?.focus(); };
+    const element = dialog.current;
+    element?.showModal();
+    return () => { element?.close(); previous?.focus(); };
   }, []);
   return <dialog className="planning-dialog" ref={dialog} aria-labelledby="planning-dialog-title" onCancel={onClose} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="planning-dialog-header"><h2 id="planning-dialog-title">{title}</h2><button className="secondary-button" autoFocus onClick={onClose}>Close panel</button></div>{children}
@@ -35,14 +35,10 @@ export function MissionSummary({ result, sites, coverage, onClose, stale }: { re
     <iframe className="mission-summary-frame" ref={frame} srcDoc={html} sandbox="allow-same-origin allow-modals" title="Printable applied mission summary" />
   </PlanningDialog>;
 }
-export function CompareDialog({ sites, result, onClose }: { sites: Candidate[]; result: SearchResponse; onClose: () => void }) {
-  return <PlanningDialog title="Compare two sites in the same mission window" onClose={onClose}><Comparison sites={sites} result={result} onClose={onClose} /></PlanningDialog>;
-}
-
 const sections = ["Overview", "Timeline", "Terrain horizon", "Events & blockers", "Scenarios", "Terrain & sky", "Sources & exports"];
-export function PlanningEvidence({ site, result, terrain, manifest, psr, features, onExplore, onDelay, onClose, stale }: {
+export function PlanningEvidence({ site, result, terrain, manifest, psr, features, onExplore, onDelay, onClose, stale, compare = [] }: {
   site: Candidate; result: SearchResponse; terrain: TerrainData | null; manifest: RegionManifest | null;
-  psr: PSRLayer | null; features: LunarFeature[]; onExplore: (id: string) => void; onDelay: (hours: number) => void; onClose: () => void; stale: boolean;
+  psr: PSRLayer | null; features: LunarFeature[]; onExplore: (id: string) => void; onDelay: (hours: number) => void; onClose: () => void; stale: boolean; compare?: string[];
 }) {
   const [tab, setTab] = useState(0);
   const [view, setView] = useState<"map" | "terrain" | "globe" | "sky">("terrain");
@@ -61,9 +57,17 @@ export function PlanningEvidence({ site, result, terrain, manifest, psr, feature
       {(tab === 1 || tab === 2) && <SiteAnalysis site={site} result={result} section={tab === 1 ? "timeline" : "horizon"} onSampleChange={setSample} />}
       {tab === 3 && <RefinedInspection site={site} result={result} />}
       {tab === 4 && <ScenarioLab site={site} result={result} onApplyDelay={onDelay} />}
-      {tab === 5 && <><div className="guide-fields"><label className="field">Terrain view<select value={view} onChange={event => setView(event.target.value as typeof view)}><option value="map">2D map</option><option value="terrain">3D terrain</option><option value="globe">Moon context</option><option value="sky">Local sky</option></select></label><label className="field">Map layer<select value={layer} disabled={view === "globe" || view === "sky"} onChange={event => setLayer(event.target.value as MapLayer)}><option value="terrain">Terrain relief</option><option value="elevation">Elevation</option><option value="score">Planning score · points</option><option value="illumination">Time with sunlight · points</option><option value="earth_visibility">Time with Earth in view · points</option><option value="psr" disabled={!psr}>Mapped PSR area{!psr ? " · unavailable" : ""}</option></select></label></div>
+      {tab === 5 && <><div className="guide-fields"><label className="field">Terrain view<select value={view} onChange={event => setView(event.target.value as typeof view)}><option value="map">2D map</option><option value="terrain">3D terrain</option><option value="globe">Moon context</option><option value="sky">Local sky</option></select></label><label className="field">Map layer<select value={layer} disabled={view === "globe" || view === "sky"} onChange={event => setLayer(event.target.value as MapLayer)}><option value="terrain">Terrain relief</option><option value="elevation">Elevation</option><option value="score">Planning score · points</option><option value="illumination">Time with sunlight · points</option><option value="earth_visibility">Time with Earth in view · points</option><option value="suitability">Good and poor spots · colour map</option><option value="psr" disabled={!psr}>Mapped PSR area{!psr ? " · unavailable" : ""}</option></select></label></div>
         {!psr && <p className="field-hint">PSR overlay unavailable: the service has not supplied a verified display mask.</p>}
-        <div className="evidence-terrain"><Suspense fallback={<p role="status">Loading selected view…</p>}>{view === "globe" ? <GlobeScene preparedLabel={manifest?.supported_region.label} /> : view === "sky" ? site.timeline.length ? <SkyScene site={site} sample={sample ?? site.timeline[0]} /> : <p>No timeline samples are available for this sky view.</p> : terrain ? <TerrainScene terrain={terrain} candidates={result.candidates} selected={site.id} onSelect={onExplore} mode={view} layer={layer} mapCandidates={result.map_candidates ?? []} psr={psr} features={features} /> : <p>Terrain display unavailable. Computed site metrics and tables remain available.</p>}</Suspense></div>
+        {site.timeline.length > 1 && (view === "terrain" || view === "sky") && (() => {
+          const index = sample ? Math.max(0, site.timeline.findIndex(row => row.time_utc === sample.time_utc)) : 0;
+          return <label className="field scene-time">Scene time · {site.timeline[index].time_utc.slice(0, 16).replace("T", " ")} UTC
+            <input type="range" min={0} max={site.timeline.length - 1} step={1} value={index}
+              aria-label="Scrub scene time across the mission window"
+              onChange={event => setSample(site.timeline[Number(event.target.value)])} />
+          </label>;
+        })()}
+        <div className="evidence-terrain"><Suspense fallback={<p role="status">Loading selected view…</p>}>{view === "globe" ? <GlobeScene preparedLabel={manifest?.supported_region.label} /> : view === "sky" ? site.timeline.length ? <SkyScene site={site} sample={sample ?? site.timeline[0]} /> : <p>No timeline samples are available for this sky view.</p> : terrain ? <TerrainScene terrain={terrain} candidates={result.candidates} selected={site.id} onSelect={onExplore} mode={view} layer={layer} mapCandidates={result.map_candidates ?? []} psr={psr} features={features} sample={sample ?? site.timeline[0]} compare={compare} /> : <p>Terrain display unavailable. Computed site metrics and tables remain available.</p>}</Suspense></div>
         <p className="field-hint">Display sampling: {terrain?.resolution_m ?? "unavailable"} m; height is exaggerated 1.5× in 3D. A display mesh does not define scientific coverage.</p></>}
       {tab === 6 && <><h3>Scientific exports</h3><div className="guide-actions"><button className="secondary-button" onClick={() => downloadJson(result, `lumen-${result.search_id}.json`)}>Download scientific JSON</button><button className="secondary-button" onClick={() => downloadTimelineCsv(site.timeline.map(row => ({ ...row })), `lumen-timeline-${site.id}.csv`)}>Download timeline CSV</button></div><h3>Assumptions, sampling and sources</h3><ul>{[...new Set([...result.assumptions, ...result.warnings])].map(text => <li key={text}>{text}</li>)}</ul><p><a href="https://pgda.gsfc.nasa.gov/products/90" target="_blank" rel="noreferrer">NASA terrain source</a> · <a href="https://naif.jpl.nasa.gov/naif/data_generic.html" target="_blank" rel="noreferrer">JPL ephemeris kernels</a></p><details><summary>Complete returned provenance</summary><pre>{JSON.stringify(result.provenance, null, 2)}</pre></details></>}
     </div>

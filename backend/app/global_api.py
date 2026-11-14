@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import UTC
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -15,9 +15,9 @@ from fastapi.responses import JSONResponse
 from pydantic import Field, model_validator
 from spiceypy.utils.exceptions import SpiceyError
 
-from app.models import Coordinate, StrictModel, TimeRange
+from app.models import Coordinate, PowerSettings, SearchRequest, StrictModel, TimeRange
 from app.services.bounded_analysis import bounded_analysis
-from app.services.ephemeris import RADIUS_M, body_positions, load_kernels
+from app.services.ephemeris import FRAME, RADIUS_M, body_positions, load_kernels, local_sky
 from app.services.search import analyze, analyze_batch
 from app.services.validation import MAXIMUM_WINDOW, VALID_END, VALID_START
 from app.settings import REPOSITORY_ROOT, settings
@@ -62,6 +62,8 @@ def find_hemisphere_features(q: str = Query(min_length=1, max_length=100)):
 class GlobalPointRequest(StrictModel):
     coordinate: Coordinate
     time_range: TimeRange
+    dte_margin_deg: float = Field(default=2, ge=0, le=90)
+    power: PowerSettings = Field(default_factory=PowerSettings)
 
 
 class GlobalAreaRequest(GlobalPointRequest):
@@ -252,12 +254,13 @@ async def preview(payload: GlobalPointRequest, request: Request):
     return JSONResponse(await bounded_analysis("preview", payload.model_dump(mode="json"), request))
 
 
-def preview_calculation(request: GlobalPointRequest):
+def preview_calculation(request: GlobalPointRequest, *, historic: bool = False):
     start, end = request.time_range.start_utc, request.time_range.end_utc
     if start.tzinfo is None or end.tzinfo is None:
         raise HTTPException(422, "Dates must include a UTC offset.")
     start, end = start.astimezone(UTC), end.astimezone(UTC)
-    if not (VALID_START <= start < end <= VALID_END) or end - start > MAXIMUM_WINDOW:
+    earliest = datetime(1960, 1, 1, tzinfo=UTC) if historic else VALID_START
+    if not (earliest <= start < end <= VALID_END) or end - start > MAXIMUM_WINDOW:
         raise HTTPException(422, "Use an increasing window of up to 31 days within 2025–2035.")
     try:
         metadata, grid = global_grid()
@@ -276,6 +279,9 @@ def preview_calculation(request: GlobalPointRequest):
         )
         maximum = np.argmax(angles, axis=1)
         profile = np.max(angles, axis=1)
+        if historic:
+            # Replay validates the touchdown angle, not fine terrain sunsets.
+            profile = np.zeros_like(profile)
         arrays = {
             "lat_deg": np.array([lat]),
             "lon_deg": np.array([lon]),
@@ -285,6 +291,17 @@ def preview_calculation(request: GlobalPointRequest):
         }
         times, sun, earth = body_positions(settings.kernel_root, start, end, 5)
         detail = analyze(arrays, 0, times, sun, earth, timeline=True)
+        if historic:
+            detail["horizon"] = [{"azimuth_deg": row["azimuth_deg"], "elevation_deg": 0.0}
+                                 for row in detail["horizon"]]
+        from app.services.candidate_extras import enrich
+        from app.services.sites import visible_at
+
+        mission = SearchRequest(region={"selector_type": "full_supported_region"},
+                                time_range=request.time_range, power=request.power,
+                                dte_margin_deg=request.dte_margin_deg)
+        enrich(detail, mission, lambda instant, body: visible_at(arrays, 0, instant, body),
+               sun_distance=local_sky(lat, lon, elevation, sun)[2])
         x, y = np.meshgrid(np.linspace(-40000, 40000, 41), np.linspace(40000, -40000, 41))
         mesh_lat, mesh_lon = destinations(lat, lon, np.arctan2(x, y), np.hypot(x, y))
         mesh = sample_global(grid, mesh_lat, mesh_lon)
@@ -302,15 +319,24 @@ def preview_calculation(request: GlobalPointRequest):
             },
             "provenance": {
                 **metadata,
+                "engine_version": "exploration-2.0.0",
+                "calculation_frame": FRAME,
+                "observer_height_m": 2,
+                "aberration_correction": {"sun": "CN+S", "earth": "XCN+S"},
+                "power_model": "ideal-direct-solar-1",
+                "time_integration": "left sample, duration weighted, mission-end clipped",
                 "kernels": list(load_kernels(settings.kernel_root)),
                 "time_step_minutes": 5,
                 "horizon_azimuth_step_deg": 5,
-                "horizon_radial_step_m": 2000,
-                "horizon_maximum_range_m": 200000,
+                "horizon_radial_step_m": None if historic else 2000,
+                "horizon_maximum_range_m": None if historic else 200000,
+                "horizon_model": "flat, zero degrees" if historic else "coarse terrain rays",
             },
             "warnings": [
+                *(["Historic replay uses a flat horizon; only touchdown Sun elevation is validated, not terrain sunset times."] if historic else []),
                 "Coarse global preview only: 1/16° grid spacing is about 1.9 km north–south; east–west spacing decreases toward the poles.",
-                "Horizon rays start at 2 km and use 5° bearings to 200 km. Nearby obstacles, small craters and narrow ridges can be missed.",
+                *( ["Flat-horizon replay does not predict local terrain shadows or identify blocking ridges."]
+                   if historic else ["Horizon rays start at 2 km and use 5° bearings to 200 km. Nearby obstacles, small craters and narrow ridges can be missed."] ),
                 "No landing suitability, fine-scale slope, roughness, PSR or resource assessment is provided.",
                 "Five-minute visibility is geometric; it is not usable solar power or an RF link budget.",
                 "At an exact pole, azimuth uses the entered longitude as an arbitrary local reference.",
