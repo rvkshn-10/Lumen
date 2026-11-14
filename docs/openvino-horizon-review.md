@@ -18,8 +18,14 @@ Use Python 3.12 and the optional local runtime. There are no paid API calls for 
 ```sh
 python -m pip install -e './backend[dev,openvino]'
 CI=1 python -m pytest backend/tests/test_horizon_api.py
+python scripts/data/prepare_kernels.py
+python scripts/data/install_cap_release.py
+npm ci
+npm run build
 CI=1 python -m uvicorn app.main:app --app-dir backend
 ```
+
+Open http://127.0.0.1:8000, choose **Open the demo comparison**, then open Site B’s **Charts**. The cap and kernel installers verify checksums before the demonstration.
 
 When running the existing Docker build, pass `--build-arg LUMEN_OPENVINO=1` to include the optional runtime. The default image leaves the runtime out, and the app displays a recoverable message if an OpenVINO review is requested. See [Intel's runtime requirements](https://docs.openvino.ai/2025/about-openvino/release-notes-openvino/system-requirements.html).
 
