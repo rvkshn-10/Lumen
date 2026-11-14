@@ -250,6 +250,11 @@ function markerScale(terrain: TerrainData, override?: number) {
 /** Two small dots over a pin: Sun and Earth, lit when in view at the current time. */
 function StatusDots({ site, sample }: { site: Candidate; sample: TimeSample }) {
   const own = site.timeline[sampleIndexAt(site.timeline, sample.time_utc)];
+  useEffect(() => registerSceneDump(`terrain-pin:${site.id}`, () => own ? [dumpRow("terrain-pin", site.id, own, {
+    sunHorizon: horizonAt(site.horizon.map(row => row.elevation_deg), own.sun_azimuth_deg),
+    earthHorizon: horizonAt(site.horizon.map(row => row.elevation_deg), own.earth_azimuth_deg),
+    sunVisible: own.sun_visible, earthVisible: own.earth_visible,
+  })] : []), [site, own]);
   if (!own) return null;
   return <>{(["sun", "earth"] as const).map((body, i) => {
     const on = body === "sun" ? own.sun_visible : own.earth_visible;

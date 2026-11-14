@@ -26,7 +26,7 @@ Lumen uses [NASA lunar topography](https://pgda.gsfc.nasa.gov/products/90) and [
 | --- | --- |
 | Compare sites and dates quickly | Scenario board, duplicate a date, sort results, four-scenario selection |
 | Visualize the Sun and Earth relative to the horizon | Solar elevation chart, Sun and Earth visibility strips, per-site terrain and sky evidence |
-| Assess power-generation potential | Solar elevation and longest night available on the current backend. Estimated power and energy charts require the Track A power response. |
+| Assess power-generation potential | Solar elevation, vertical-tracking and horizontal panel power, integrated energy, and a constant-load battery check from the Track A response. |
 | Assess direct-to-Earth communication windows | Earth-in-view strips, sampled Earthset, and scenario metrics. A link budget is outside the model. |
 | Serve planners, educators, and the public | Audience switch, tour, glossary, and scientific details |
 
@@ -40,6 +40,15 @@ Lumen uses [NASA lunar topography](https://pgda.gsfc.nasa.gov/products/90) and [
 
 ## Local verification
 
-Set `VITE_LUMEN_MOCK=1` for a synthetic example of the upcoming analysis, power, event, curated-place, and replay responses. The planner still uses the current API for terrain and coverage. The official Track A fixture and independent verifier are pending integration. Scenario metrics carry `data-metric` and `data-raw` for display-parity checks.
+The V2 tracks and independent verifier are integrated. Scenario metrics carry `data-metric` and `data-raw` for display-parity checks. The comparison clock drives all selected terrain pins; only scenarios covering that time appear in the scene. Date-changed scenarios retain failed-constraint evidence and suggested alternatives.
 
-For a synchronous production-style build, run `python scripts/track_c_smoke.py --url <base-url> --output ui-dump.json` after installing Playwright and Chromium. It compares what the board displays with the actual search response. The independent verifier is a separate integration gate.
+After installing Playwright and Chrome, building the frontend, and starting the API with prepared datasets, run:
+
+```powershell
+python scripts/v2_integration_smoke.py --url http://127.0.0.1:8000
+python scripts/verify/lumen_verify.py --result data/cache/v2-integration/analysis.json --scene-dump data/cache/v2-integration/scene.json --ui-dump data/cache/v2-integration/ui.json --cache data/cache/track-a/cap-temporal.npz --iterate 2 --report data/cache/v2-integration/verification
+```
+
+The browser pass uses live science responses to exercise four-site terrain, ten compare-clock positions, date duplication, mobile controls, and Apollo 12 replay. It exports real analysis, UI and scene inputs plus desktop/mobile screenshots to `data/cache/v2-integration/`. The independent checker passed **111 checks, 0 failures, 0 skips**, including all 16 displayed metrics and 50 scene samples. The merged frontend has **67 passing tests**. GitHub CI also checks the API, frontend and production Docker image.
+
+`scripts/track_c_smoke.py` remains available for a board-only display check. Set `VITE_LUMEN_MOCK=1` only for synthetic control demonstrations; release validation uses the live API. The three-person usability rehearsal and demo recording remain manual tasks.

@@ -2,9 +2,10 @@ import { getSiteAnalysis } from "./api";
 import { isMissionRequest } from "./missions";
 import { withinSearchDeadline } from "./deadline";
 import { canonical } from "./planning";
-import type { Alternative as ContractAlternative, BodyEvent, Candidate, SearchRequest, SearchResponse, TimeSample } from "./types";
+import { COMPARE_COLORS } from "./sky-geometry";
+import type { Alternative as ContractAlternative, BodyEvent, Candidate, SearchRequest, SearchResponse, SiteDetail, TimeSample } from "./types";
 
-// Optional Track A fields, pending the shared contract merge.
+// Scenario aliases use the shared V2 API contract.
 export type LunarEvent = BodyEvent;
 export type ScenarioSite = Candidate;
 export interface Scenario {
@@ -12,13 +13,15 @@ export interface Scenario {
   site: ScenarioSite;
   request: SearchRequest;
   label?: string;
+  constraint_status?: SiteDetail["constraint_status"];
+  alternatives?: Alternative[];
 }
 export type Alternative = ContractAlternative & { site_id?: string };
 export type ScenarioResult = SearchResponse & { alternatives?: Alternative[] };
 export type Audience = "Public" | "Educator" | "Planner";
 export const MAX_SCENARIOS = 8;
 export const COMPARE_LIMIT = 4;
-export const SITE_COLORS = ["#56b4e9", "#e69f00", "#009e73", "#cc79a7"];
+export const SITE_COLORS = COMPARE_COLORS;
 export const HOUR_MS = 3_600_000;
 
 export function scenarioKey(siteId: string, request: SearchRequest) {
@@ -80,7 +83,8 @@ export async function loadScenario(id: string, request: SearchRequest, signal: A
     time_utc: event.time_utc, uncertainty_minutes: Math.ceil(event.bracket_seconds / 120),
   }));
   const applied = detail.request ?? request;
-  return { key: scenarioKey(id, applied), request: applied,
+  return { key: scenarioKey(id, applied), request: applied, constraint_status: detail.constraint_status,
+    alternatives: detail.alternatives,
     site: { ...detail.site, rank: 0, score: detail.score, criteria_scores: detail.criteria_scores,
       metrics: detail.metrics, timeline: detail.timeline, horizon: detail.horizon, events, power: detail.power, dte: detail.dte } };
 }

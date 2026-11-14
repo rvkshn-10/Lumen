@@ -1,0 +1,102 @@
+"""Exercise the merged V2 workflows and export independent UI/scene parity inputs."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import random
+from pathlib import Path
+
+from playwright.sync_api import expect, sync_playwright
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--url", default="http://127.0.0.1:8000")
+    parser.add_argument("--channel", default="chrome")
+    parser.add_argument("--output", type=Path, default=Path("data/cache/v2-integration"))
+    options = parser.parse_args()
+    options.output.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel=options.channel)
+        errors = []
+        page = browser.new_page(viewport={"width": 1440, "height": 1000}, reduced_motion="reduce")
+        actual = []
+
+        def capture_search(route):
+            # Preserve the real response before Chrome evicts its large body.
+            response = route.fetch(timeout=135000)
+            assert response.ok, response.text()
+            actual.append(response.json())
+            route.fulfill(response=response)
+
+        page.route("**/api/v1/candidates/search", capture_search)
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.goto(options.url + "/?parity")
+        page.get_by_role("combobox", name="Area selection", exact=True).select_option("full_supported_region")
+        page.get_by_role("button", name="Continue to mission").click()
+        page.get_by_role("button", name="Apply October 2028 demo window").click()
+        page.get_by_role("button", name="Review mission", exact=True).click()
+        with page.expect_response(lambda response: response.url.endswith("/candidates/search"), timeout=135000) as pending:
+            page.get_by_role("button", name="Find candidate sites", exact=True).click()
+        result = actual[0]
+        assert pending.value.ok and len(result["candidates"]) >= 4
+        (options.output / "analysis.json").write_text(json.dumps(result), encoding="utf-8")
+        board = page.get_by_role("region", name="Scenario board", exact=True)
+        expect(board).to_be_visible()
+        boxes = board.get_by_role("checkbox")
+        for index in range(4):
+            boxes.nth(index).check()
+        expect(board.get_by_text("Shared terrain at the compare clock", exact=True)).to_be_visible()
+        page.wait_for_function("window.__lumenScene?.dump().samples.filter(s => s.view === 'terrain-pin').length === 4")
+        slider = board.get_by_role("slider", name="Compare time")
+        maximum = int(slider.get_attribute("max"))
+        samples = []
+        rng = random.Random(20261114)
+        for _ in range(10):
+            slider.evaluate("""(el, value) => {
+                Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, String(value));
+                el.dispatchEvent(new Event('input', {bubbles:true}));
+                el.dispatchEvent(new Event('change', {bubbles:true}));
+            }""", rng.randrange(maximum))
+            page.wait_for_timeout(150)
+            samples.extend(page.evaluate("window.__lumenScene.dump().samples"))
+        (options.output / "scene.json").write_text(json.dumps({"samples": samples}), encoding="utf-8")
+        values = board.locator(".scenario-table [data-metric]").evaluate_all("""elements => elements.flatMap(el => {
+            const key = el.dataset.metric.split(':').at(-1);
+            if (key === 'sunset' || key === 'earthset') return [];
+            return [{key: el.dataset.metric, raw: Number(el.dataset.raw), displayed: el.textContent.trim(),
+                scale: key.endsWith('_fraction') ? 100 : key === 'energy_wh' ? 0.001 : 1,
+                decimals: key === 'energy_wh' ? 2 : 1}];
+        })""")
+        assert len(values) == 16
+        (options.output / "ui.json").write_text(json.dumps({"values": values}), encoding="utf-8")
+        page.screenshot(path=str(options.output / "desktop.png"), full_page=True)
+        # Date duplication must obtain new live science, not duplicate a response.
+        board.get_by_role("button", name="Duplicate & change date", exact=True).first.click()
+        board.locator('input[type="datetime-local"]').fill("2028-10-02T00:00")
+        with page.expect_response(lambda response: response.url.endswith("/analysis"), timeout=135000) as duplicate:
+            board.get_by_role("button", name="Analyze the new date", exact=True).click()
+        assert duplicate.value.ok, duplicate.value.text()
+        expect(board.locator(".scenario-table tbody tr")).to_have_count(5)
+        detail = duplicate.value.json()
+        if detail["constraint_status"]["passes"] is False:
+            expect(board.get_by_text("Fails mission limits · see Try instead", exact=True)).to_be_visible()
+        # Compact screen: all row selection controls remain usable.
+        page.set_viewport_size({"width": 390, "height": 844})
+        expect(board.get_by_role("checkbox").first).to_be_visible()
+        page.screenshot(path=str(options.output / "mobile.png"), full_page=True)
+        # The curated replay consumes the actual nested Track A response.
+        page.get_by_role("button", name="Choose another area", exact=True).click()
+        page.get_by_role("button", name="Browse lunar places", exact=True).click()
+        page.get_by_role("button", name="Historic missions", exact=True).click()
+        mission = page.locator(".curated-list li").filter(has=page.get_by_text("Apollo 12", exact=True))
+        mission.get_by_role("button", name="Open replay", exact=True).click()
+        expect(page.locator('[data-metric="apollo-12:sun_elevation_deg"]')).to_have_text("5.1°", timeout=135000)
+        assert not errors, errors
+        browser.close()
+    print(f"Verified four-site terrain, 10 scene times, {len(values)} UI values, date duplication, mobile and historic replay.")
+
+
+if __name__ == "__main__":
+    main()

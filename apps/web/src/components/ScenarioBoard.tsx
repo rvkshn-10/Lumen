@@ -2,11 +2,13 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { coordinate, downloadTimelineCsv, hours, percent, utcTime } from "../lib/format";
 import { scenarioVerdict } from "../lib/explanations";
 import { COMPARE_LIMIT, MAX_SCENARIOS, SITE_COLORS, alternativeScenario, batteryMargin, loadScenario, nextEvent, sampledEvents, scenarioKey, scenarioShareHash, scenarioWindow, visibilityRuns } from "../lib/scenarios";
-import type { Candidate } from "../lib/types";
+import type { Candidate, TerrainData } from "../lib/types";
+import { COMPARE_COLORS, sampleIndexAt } from "../lib/sky-geometry";
 import type { Alternative, Audience, Scenario, ScenarioResult } from "../lib/scenarios";
 import "./scenario-board.css";
 
 const GlobeScene = lazy(() => import("./GlobeScene").then(module => ({ default: module.GlobeScene })));
+const TerrainScene = lazy(() => import("./TerrainScene").then(module => ({ default: module.TerrainScene })));
 const metrics = [
   { key: "illumination_fraction", label: "Sunlight", format: percent, higher: true, meaning: "The share of the window when any part of the Sun clears the terrain, like sunlight over a ridge." },
   { key: "earth_visibility_fraction", label: "Earth in view", format: percent, higher: true, meaning: "The share of the window when Earth's center clears the terrain, like a direct sight line over a wall." },
@@ -40,10 +42,11 @@ function EventCountdown({ row, type, clock }: { row: Scenario; type: "sunset" | 
 
 function Timeline({ rows, start, end, clock }: { rows: Scenario[]; start: number; end: number; clock: number }) {
   const position = (time: number) => (time - start) * 100 / (end - start);
+  const ids = [...new Set(rows.map(row => row.site.id))];
   return <section className="scenario-timeline" aria-label="Aligned site timelines">
     <p>{utcTime(new Date(start).toISOString())} to {utcTime(new Date(end).toISOString())} · Filled segments show visibility</p>
-    {rows.map((row, i) => <div className="scenario-strip-row" key={row.key}>
-      <strong><span className="scenario-dot" style={{ backgroundColor: SITE_COLORS[i] }} />{label(row)} · {row.request.time_range.start_utc.slice(0, 10)}</strong>
+    {rows.map(row => <div className="scenario-strip-row" key={row.key}>
+      <strong><span className="scenario-dot" style={{ backgroundColor: SITE_COLORS[ids.indexOf(row.site.id)] }} />{label(row)} · {row.request.time_range.start_utc.slice(0, 10)}</strong>
       {(["sun_visible", "earth_visible"] as const).map((key, index) => {
         const runs = visibilityRuns(row.site, row.request, key);
         const title = index ? "Earth in view" : "Sunlight";
@@ -101,9 +104,9 @@ function Charts({ row }: { row: Scenario }) {
   </section>;
 }
 
-export function ScenarioBoard({ result, audience, onInspect, onSummarySelection, initialRows }: {
+export function ScenarioBoard({ result, audience, onInspect, onSummarySelection, initialRows, terrain }: {
   result?: ScenarioResult; audience: Audience; onInspect?: (id: string) => void;
-  onSummarySelection?: (sites: Candidate[]) => void; initialRows?: Scenario[];
+  onSummarySelection?: (sites: Candidate[]) => void; initialRows?: Scenario[]; terrain?: TerrainData | null;
 }) {
   const [rows, setRows] = useState<Scenario[]>(() => initialRows ?? result?.candidates.slice(0, 4).map(site => ({ site, request: result.request, key: scenarioKey(site.id, result.request) })) ?? []);
   const [selected, setSelected] = useState<string[]>([]);
@@ -135,6 +138,11 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
   });
   const chartRow = rows.find(row => row.key === chart);
   const mapSites = [...new Map(picked.map(row => [row.site.id, row.site])).values()];
+  const alternatives = [...new Map([...(result?.alternatives ?? []), ...rows.flatMap(row => row.alternatives ?? [])]
+    .map(option => [option.suggestion_id ?? `${option.kind}:${option.id}:${JSON.stringify(option.request)}`, option])).values()];
+  const activeSites = [...new Map(picked.filter(row => clock >= Date.parse(row.request.time_range.start_utc)
+    && clock <= Date.parse(row.request.time_range.end_utc)).map(row => [row.site.id, row.site])).values()];
+  const sceneSample = activeSites[0]?.timeline[sampleIndexAt(activeSites[0].timeline, new Date(clock).toISOString())];
   function selectRows(keys: string[]) {
     setSelected(keys);
     onSummarySelection?.(rows.filter(row => keys.includes(row.key) && result &&
@@ -201,7 +209,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
       </tr></thead><tbody role="rowgroup">{sorted.map(row => {
         const checked = selected.includes(row.key);
         return <tr key={row.key} data-scenario-start={row.request.time_range.start_utc} role="row"><td role="cell"><input type="checkbox" checked={checked} disabled={!checked && selected.length >= COMPARE_LIMIT} aria-label={`Compare ${label(row)} starting ${row.request.time_range.start_utc}`} onChange={() => selectRows(checked ? selected.filter(key => key !== row.key) : [...selected, row.key])} /></td>
-          <th scope="row" role="rowheader">{label(row)}<small>{utcTime(row.request.time_range.start_utc)} → {utcTime(row.request.time_range.end_utc)}</small></th>
+          <th scope="row" role="rowheader">{label(row)}<small>{utcTime(row.request.time_range.start_utc)} → {utcTime(row.request.time_range.end_utc)}</small>{row.constraint_status?.passes === false && <small className="guide-error">Fails mission limits · see Try instead</small>}</th>
           <td role="cell" data-label="Next sunset"><EventCountdown row={row} type="sunset" clock={Math.max(clock, Date.parse(row.request.time_range.start_utc))} /></td><td role="cell" data-label="Next Earthset"><EventCountdown row={row} type="earthset" clock={Math.max(clock, Date.parse(row.request.time_range.start_utc))} /></td>
           {metrics.map(metric => <td role="cell" key={metric.key} data-label={metric.label}><Metric row={row} metric={metric} /></td>)}
           <td role="cell"><div className="scenario-row-actions"><button className="text-button" aria-pressed={chart === row.key} onClick={() => setChart(current => current === row.key ? "" : row.key)}>Charts</button>
@@ -220,7 +228,16 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     {picked.length > 1 && <section className="scenario-comparison" aria-label="Compare selected scenarios">
       <h3>Compare selected scenarios</h3>
       <Timeline rows={picked} start={start} end={end} clock={clock} />
-      <div className="table-scroll" role="region" aria-label="Comparison values" tabIndex={0}><table className="comparison-table"><thead><tr><th scope="col">Indicator</th>{picked.map((row, index) => <th scope="col" key={row.key}><span className="scenario-dot" style={{ backgroundColor: SITE_COLORS[index] }} />{label(row)}<small>{row.request.time_range.start_utc.slice(0, 10)}</small></th>)}</tr></thead>
+      {terrain && <div className="scenario-terrain"><h4>Shared terrain at the compare clock</h4>
+        <p>{utcTime(new Date(clock).toISOString())} · Only scenarios covering this time are shown. Pin colours match the comparison.</p>
+        {sceneSample ? <Suspense fallback={<p role="status">Loading shared terrain…</p>}><TerrainScene
+          terrain={terrain} candidates={activeSites} selected={activeSites[0].id} onSelect={id => setChart(picked.find(row => row.site.id === id)?.key ?? "")}
+          compare={mapSites.map(site => site.id)} sample={sceneSample} mode="terrain" layer="terrain"
+          mapCandidates={result?.map_candidates ?? []} psr={null} features={[]} /></Suspense>
+          : <p>No selected scenario covers this clock time.</p>}
+        <div className="scenario-tools">{mapSites.map((site, index) => <span key={site.id}><span className="scenario-dot" style={{ backgroundColor: COMPARE_COLORS[index] }} />{coordinate(site.latitude_deg, site.longitude_deg_east)}</span>)}</div>
+      </div>}
+      <div className="table-scroll" role="region" aria-label="Comparison values" tabIndex={0}><table className="comparison-table"><thead><tr><th scope="col">Indicator</th>{picked.map(row => <th scope="col" key={row.key}><span className="scenario-dot" style={{ backgroundColor: SITE_COLORS[mapSites.findIndex(site => site.id === row.site.id)] }} />{label(row)}<small>{row.request.time_range.start_utc.slice(0, 10)}</small></th>)}</tr></thead>
         <tbody>{metrics.map(metric => {
           const values = picked.flatMap(row => value(row, metric.key) ?? []);
           const best = (metric.higher ? Math.max : Math.min)(...values);
@@ -233,9 +250,9 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
       {map && mapSites.length > 1 && <div className="scenario-map"><Suspense fallback={<p role="status">Loading Moon…</p>}><GlobeScene sites={mapSites} selectedCenter={mapSites[0]} timeRange={{ start_utc: new Date(start).toISOString(), end_utc: new Date(end).toISOString() }} preparedLabel="Selected scenario locations" /></Suspense></div>}
     </section>}
     {chartRow && <div className="scenario-chart-section"><h3>{label(chartRow)} · {utcTime(chartRow.request.time_range.start_utc)}</h3><Charts key={chartRow.key} row={chartRow} /></div>}
-    {result && (!result.candidates.length || !!result.alternatives?.length) && <section className="scenario-alternatives"><h3>Try instead</h3>
-      {!result.alternatives?.length ? <p>No alternatives were returned for this mission. You can edit the area, dates, or required limits and analyze again.</p> :
-        <div className="scenario-alternative-grid">{result.alternatives.slice(0, 3).map(alternative => {
+    {(result?.candidates.length === 0 || !!alternatives.length || rows.some(row => row.constraint_status?.passes === false)) && <section className="scenario-alternatives"><h3>Try instead</h3>
+      {!alternatives.length ? <p>No alternatives were returned for this mission. You can edit the area, dates, or required limits and analyze again.</p> :
+        <div className="scenario-alternative-grid">{alternatives.slice(0, 3).map(alternative => {
           const base = rows.find(row => row.site.id === alternative.for_site);
           return <article key={alternative.suggestion_id ?? `${alternative.kind}-${alternative.id}`}><strong>{({ nearby: "Nearby site", shifted_window: "Shift the dates", relaxed: "Adjust a limit" })[alternative.kind]}</strong>
             <p>{alternative.reason}</p>

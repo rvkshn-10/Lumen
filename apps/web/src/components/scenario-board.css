@@ -111,3 +111,8 @@
     font-size: 11px;
   }
 }
+.scenario-terrain { margin: 20px 0; }
+.scenario-terrain > p { margin: 10px 0; color: #b8cbc0; }
+.scenario-terrain .terrain-3d-frame { height: 420px; border-radius: 12px; overflow: hidden; }
+@media (max-width: 650px) { .scenario-terrain .terrain-3d-frame { height: 300px; } }
+@media print { .scenario-terrain { display: none; } }

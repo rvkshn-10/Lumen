@@ -140,7 +140,7 @@ export function GuidedPlanner() {
     } catch (reason) { if (!abort.signal.aborted) setState({ phase: "failed", message: reason instanceof Error ? reason.message : "Inspection unavailable." }); }
     finally { if (!abort.signal.aborted) setInspecting(false); }
   }
-  if (shared.length) return <div className="guided-planner" id="explorer"><SharedScenarioBoard links={shared} onClose={() => {
+  if (shared.length) return <div className="guided-planner" id="explorer"><SharedScenarioBoard links={shared} terrain={terrain} onClose={() => {
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
     setShared([]);
   }} /></div>;
@@ -167,7 +167,7 @@ export function GuidedPlanner() {
       {state && <div className={`analysis-status ${state.phase}`} role="status"><strong>{phases[state.phase as keyof typeof phases] ?? "Analysis update"}</strong><p>{state.message}</p>{state.queue_position != null && <p>Queue position reported by the service: {state.queue_position}.</p>}
         {busy && <SearchBudget />}{busy ? <button className="secondary-button" onClick={cancel}>Cancel analysis</button> : state.phase !== "complete" && <button className="secondary-button" onClick={() => { setStep(2); setReview(false); }}>Review and resubmit mission</button>}</div>}
       {result && <><div className="applied-mission"><div><span className="eyebrow">APPLIED MISSION</span><p>{areaName(result.request.region)} · {priorityName(result.request)}<br />{result.common_window.start_utc} to {result.common_window.end_utc}</p></div><div className="guide-actions"><button className="secondary-button" onClick={() => setModal("summary")}>Create mission summary</button><button className="text-button" onClick={() => downloadJson(result, `lumen-${result.search_id}.json`)}>Export scientific JSON</button></div></div>
-        <ScenarioBoard key={result.search_id} result={result} audience={audience} onInspect={id => void inspect(id)} onSummarySelection={setSummarySites} />
+        <ScenarioBoard key={result.search_id} result={result} audience={audience} terrain={terrain} onInspect={id => void inspect(id)} onSummarySelection={setSummarySites} />
         <details className="advanced-mission" open={audience === "Planner"}><summary>Shortlist, terrain and scientific details</summary>
           <CandidateResults key={result.search_id} result={result} selected={selected} onSelect={id => void inspect(id)} />
         </details>

@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import type { Scenario, ScenarioLink } from "../lib/scenarios";
 import { loadScenario } from "../lib/scenarios";
 import { ScenarioBoard } from "./ScenarioBoard";
+import type { TerrainData } from "../lib/types";
 
-export function SharedScenarioBoard({ links, onClose }: { links: ScenarioLink[]; onClose: () => void }) {
+export function SharedScenarioBoard({ links, onClose, terrain }: { links: ScenarioLink[]; onClose: () => void; terrain?: TerrainData | null }) {
   const [outcome, setOutcome] = useState<{ rows: Scenario[]; failures: number }>();
   useEffect(() => {
     const controller = new AbortController();
@@ -26,7 +27,7 @@ export function SharedScenarioBoard({ links, onClose }: { links: ScenarioLink[];
     <div className="guide-actions"><button className="secondary-button" onClick={onClose}>Back to planner</button></div>
     {!outcome ? <p role="status">Loading shared scenarios…</p> : <>
       {outcome.failures > 0 && <p role="status">{outcome.failures} shared scenarios could not be analyzed.</p>}
-      {outcome.rows.length > 0 && <ScenarioBoard initialRows={outcome.rows} audience="Public" />}
+      {outcome.rows.length > 0 && <ScenarioBoard initialRows={outcome.rows} audience="Public" terrain={terrain} />}
     </>}
   </section>;
 }
