@@ -1,0 +1,10 @@
+{
+  "fixture": "Published Apollo mission-record golden; not app output",
+  "site_id": "apollo-12",
+  "landing_utc": "1969-11-19T06:54:36Z",
+  "latitude_deg": -3.0128,
+  "longitude_deg_east": -23.4219,
+  "expected_sun_elevation_deg": 5.1,
+  "tolerance_deg": 0.3,
+  "source_url": "https://www.nasa.gov/wp-content/uploads/static/history/SP-4029/Apollo_18-27_LM_Lunar_Landing.htm"
+}

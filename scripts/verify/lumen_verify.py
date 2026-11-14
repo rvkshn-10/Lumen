@@ -43,14 +43,14 @@ import json
 import math
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import reference_models as ref  # noqa: E402
-from oracle_ephemeris import Ephemeris, local_sky  # noqa: E402
+import reference_models as ref
+from oracle_ephemeris import Ephemeris, local_sky
 
 ROOT = Path(__file__).resolve().parents[2]
 METRICS = ("illumination_fraction", "earth_visibility_fraction", "longest_sunlight_hours",
@@ -67,7 +67,7 @@ TOL = {  # absolute tolerances; documented in docs/verification.md
 
 
 def parse_t(s: str) -> datetime:
-    return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(timezone.utc)
+    return datetime.fromisoformat(s).astimezone(UTC)
 
 
 def daz(a, b):
@@ -103,7 +103,7 @@ class Context:
         self._sky = {}
 
     def bodies(self, times):
-        key = (times[0], times[-1], len(times))
+        key = tuple(times)
         if key not in self._sky:
             et = np.array([self.eph.utc_to_et(t) for t in times])
             self._sky[key] = (self.eph.apparent(10, et), self.eph.apparent(399, et, transmit=True))
@@ -114,7 +114,20 @@ def load_results(paths):
     out = []
     for p in paths:
         try:
-            out.append((p, json.loads(Path(p).read_text())))
+            result = json.loads(Path(p).read_text())
+            if "expected_sun_elevation_deg" in result:
+                continue  # Published golden metadata, not an analysis response.
+            if "mission_window" in result and "touchdown" in result:
+                window = result["mission_window"]
+                result = {"request": {"time_range": window["time_range"], "hard_constraints": {}},
+                          "candidates": [result["candidate"]], "unranked": True,
+                          "alternatives": [], "provenance": window["provenance"],
+                          "historic_touchdown": {"site": result["site"], "sample": result["touchdown"]}}
+            elif result.get("ranking", "").startswith("none"):
+                result = {**result, "unranked": True, "alternatives": []}
+            elif "site" in result and "timeline" in result:
+                result = {**result, "candidates": [{**result["site"], **result}], "unranked": True}
+            out.append((p, result))
         except (OSError, ValueError) as exc:
             out.append((p, {"_error": str(exc)}))
     return out
@@ -182,7 +195,7 @@ def suite_ephemeris(ctx, rep, results):
             sun, earth = ctx.bodies(times)
             saz, sel, _ = local_sky(c["latitude_deg"], c["longitude_deg_east"], c["elevation_m"], sun)
             eaz, eel, _ = local_sky(c["latitude_deg"], c["longitude_deg_east"], c["elevation_m"], earth)
-            g = lambda k: np.array([r[k] for r in tl])  # noqa: E731
+            g = lambda k, timeline=tl: np.array([r[k] for r in timeline])
             err = max(np.abs(sel - g("sun_elevation_deg")).max(), daz(saz, g("sun_azimuth_deg")).max(),
                       np.abs(eel - g("earth_elevation_deg")).max(), daz(eaz, g("earth_azimuth_deg")).max())
             rep.add(s, f"{Path(path).name}:{c['id']} Sun/Earth az/el", err <= TOL["angle_deg"],
@@ -195,11 +208,13 @@ def suite_visibility_scoring(ctx, rep, results):
         req = res.get("request", {})
         cands = res.get("candidates", [])
         if not cands:
+            if "request" in res:
+                suite_features_result(ctx, rep, path, res)
             continue
         start, end = parse_t(req["time_range"]["start_utc"]), parse_t(req["time_range"]["end_utc"])
         duration = (end - start).total_seconds() / 3600
-        anchors = res["provenance"]["score_anchors"]["bounds"]
-        weights = res["normalized_preferences"]
+        anchors = res.get("provenance", {}).get("score_anchors", {}).get("bounds")
+        weights = res.get("normalized_preferences")
         for c in cands:
             tl = c.get("timeline")
             name = f"{Path(path).name}:{c['id']}"
@@ -235,12 +250,34 @@ def suite_visibility_scoring(ctx, rep, results):
                 rep.add("physics", f"{name} Earth |el| <= colat+8.1", bool(ok_e),
                         err=float(np.abs(eel).max()), tol=colat + 8.1)
                 suite_features_candidate(ctx, rep, name, c, times, sel, sd, m)
+                if "dte" in c:
+                    margin = req.get("dte_margin_deg", 2)
+                    states = eel - eh > margin
+                    actual = c["dte"]
+                    fraction, longest, blackout = ref.run_metrics(states, ref.hours_between(times))
+                    ok = (actual["margin_deg"] == margin
+                          and abs(actual["contact_fraction"] - fraction) < 1e-9
+                          and abs(actual["longest_contact_hours"] - longest) < 1e-6
+                          and abs(actual["longest_blackout_hours"] - blackout) < 1e-6
+                          and np.array_equal(states, [row["dte_contact"] for row in tl]))
+                    rep.add("features", f"{name} DTE margin preserves geometric visibility", ok)
+                if "next_sunset" in c:
+                    instant = parse_t(req.get("scrub_time_utc") or req["time_range"]["start_utc"])
+                    for kind in ("sunset", "earthset"):
+                        expected = next((e for e in c["events"] if e["type"] == kind
+                                         and parse_t(e["time_utc"]) > instant), None)
+                        rep.add("features", f"{name} next {kind} at scrub time", c[f"next_{kind}"] == expected)
+            if res.get("unranked") or not anchors or not weights:
+                continue
             crit = ref.category_scores(c["metrics"], c["slope_deg"], c["roughness_m"],
                                        c["elevation_m"], duration, anchors)
             cerr = max(abs(crit[k] - c["criteria_scores"][k]) for k in crit)
             score = ref.total_score({**crit, "science_proximity": c["criteria_scores"].get("science_proximity")}, weights)
             serr = max(cerr * 100, abs(score - c["score"]))
             rep.add("scoring", f"{name} criteria + score", serr <= TOL["score"], err=serr, tol=TOL["score"])
+        if res.get("unranked"):
+            suite_features_result(ctx, rep, path, res)
+            continue
         scores = [c["score"] for c in cands]
         rep.add("scoring", f"{Path(path).name} ranks sorted by score",
                 scores == sorted(scores, reverse=True) and [c["rank"] for c in cands] == list(range(1, len(cands) + 1)))
@@ -374,6 +411,22 @@ def suite_features_candidate(ctx, rep, name, c, times, sel, sd, m):
         ewh = ref.energy_wh(expected, ref.hours_between(times))
         rep.add(s, f"{name} window energy", abs(power["energy_wh"] - ewh) <= 1e-6 * max(1, ewh),
                 err=abs(power["energy_wh"] - ewh))
+        horizontal = ref.power_w(sel, sd, m["_solar_fraction"], area_m2=a.get("area_m2", 1.0),
+                                 efficiency=a.get("efficiency", .30), mount="horizontal")
+        hgot = np.array([p["horizontal_w"] for p in power["series"]])
+        herr = float(np.max(np.abs(hgot - horizontal[idx]) / np.maximum(1, horizontal[idx])))
+        hewh = ref.energy_wh(horizontal, ref.hours_between(times))
+        rep.add(s, f"{name} horizontal power and energy", herr <= TOL["power_rel"]
+                and abs(power["horizontal_energy_wh"] - hewh) <= 1e-6 * max(1, hewh), err=herr)
+        if all("sun_distance_km" in row for row in c["timeline"]):
+            distance_error = np.max(np.abs(np.array([r["sun_distance_km"] for r in c["timeline"]]) - sd))
+            rep.add(s, f"{name} observer Sun distance", distance_error <= 1e-5, err=distance_error, tol=1e-5)
+        if "battery" in power:
+            battery = power["battery"]
+            wanted = ref.battery_survival(expected, ref.hours_between(times), load_w=battery["load_w"],
+                                           capacity_wh=battery["capacity_wh"], start_soc=battery["start_soc"])
+            rep.add(s, f"{name} bucket battery", abs(battery["min_soc_wh"] - wanted["min_soc_wh"]) < 1e-5
+                    and battery["depleted_index"] == wanted["depleted_index"])
     events = c.get("events")
     if events is None:
         rep.add(s, f"{name} sunset/earthset events", False, skip=True, detail="not implemented yet (Track A)")
@@ -404,19 +457,82 @@ def suite_features_result(ctx, rep, path, res):
     hc = res["request"]["hard_constraints"]
     bad = []
     for a in alts:
-        mt = a["metrics"]
+        mt = {**a["metrics"], **a.get("terrain", {})}
+        effective = hc
+        if a.get("kind") == "relaxed":
+            effective = a.get("request", {}).get("hard_constraints", {})
+            changed = [key for key in set(hc) | set(effective) if hc.get(key) != effective.get(key)]
+            relaxation = a.get("relaxation", {})
+            if len(changed) != 1 or changed != [relaxation.get("constraint")]:
+                bad.append(f"{a.get('id')} does not disclose exactly one relaxation")
         for key, metric, minimum in (("minimum_illumination_fraction", "illumination_fraction", True),
                                      ("minimum_earth_visibility_fraction", "earth_visibility_fraction", True),
+                                     ("minimum_continuous_sunlight_hours", "longest_sunlight_hours", True),
+                                     ("minimum_continuous_communication_hours", "longest_communication_hours", True),
                                      ("maximum_continuous_darkness_hours", "longest_darkness_hours", False),
-                                     ("maximum_continuous_blackout_hours", "longest_blackout_hours", False)):
-            lim = hc.get(key)
-            if lim is not None and (mt[metric] < lim if minimum else mt[metric] > lim):
+                                     ("maximum_continuous_blackout_hours", "longest_blackout_hours", False),
+                                     ("maximum_slope_deg", "slope_deg", False),
+                                     ("maximum_roughness_m", "roughness_m", False),
+                                     ("minimum_elevation_m", "elevation_m", True),
+                                     ("maximum_elevation_m", "elevation_m", False),
+                                     ("maximum_distance_to_psr_km", "distance_psr_km", False),
+                                     ("maximum_distance_to_science_feature_km", "distance_science_feature_km", False)):
+            lim = effective.get(key)
+            if lim is not None and metric not in mt:
+                # Legacy oracle fixture predates terrain evidence; current app output must supply it.
+                if not res.get("fixture"):
+                    bad.append(f"{a.get('id')} missing evidence for {key}")
+            elif lim is not None and (mt[metric] < lim if minimum else mt[metric] > lim):
                 bad.append(f"{a.get('id')} violates {key}")
         if a.get("kind") == "nearby" and a.get("distance_km", 0) > a.get("search_radius_km", 1e9):
             bad.append(f"{a.get('id')} outside stated radius")
         if not a.get("reason"):
             bad.append(f"{a.get('id')} has no plain-language reason")
+        if "request" in a:
+            verify_alternative_oracle(ctx, rep, name, a)
     rep.add(s, f"{name} alternatives satisfy the failed constraints", not bad, detail="; ".join(bad[:5]))
+
+
+def verify_alternative_oracle(ctx, rep, name, alternative):
+    """Recompute suggested metrics from real terrain and the independent oracle."""
+    import re
+
+    identifier = alternative["id"]
+    match = re.fullmatch(r"lola-([+-]\d{5,6})-([+-]\d{5,6})", identifier)
+    label = f"{name} {alternative['kind']} alternative oracle metrics"
+    if not match:
+        rep.add("features", label, False, detail="invalid prepared site id")
+        return
+    x, y = map(int, match.groups())
+    tile_path = Path(ctx.args.cap) / f"tile-{(x + 100000) // 20000}-{(y + 100000) // 20000}" / "terrain.npz"
+    if not tile_path.exists():
+        rep.add("features", label, False, skip=True, detail=f"prepare {tile_path}")
+        return
+    with np.load(tile_path, allow_pickle=False) as tile:
+        positions = np.flatnonzero(tile["ids"] == identifier)
+        if len(positions) != 1:
+            rep.add("features", label, False, detail="suggested site absent from prepared tile")
+            return
+        index = int(positions[0])
+        lat, lon, height = (float(tile[key][index]) for key in ("lat_deg", "lon_deg", "elevation_m"))
+        profile = tile["horizons_deg"][index]
+        window = alternative["request"]["time_range"]
+        start, end = parse_t(window["start_utc"]), parse_t(window["end_utc"])
+        times = [start + timedelta(seconds=t) for t in range(0, int((end - start).total_seconds()), 300)]
+        if not times or times[-1] != end:
+            times.append(end)
+        sun, earth = ctx.bodies(times)
+        saz, sel, sd = local_sky(lat, lon, height, sun)
+        eaz, eel, _ = local_sky(lat, lon, height, earth)
+        expected = ref.visibility_metrics(sel, ref.horizon_at(profile, saz), sd,
+                                          eel, ref.horizon_at(profile, eaz), ref.hours_between(times))
+        errors = [abs(expected[key] - alternative["metrics"][key]) /
+                  (TOL["fraction"] if "fraction" in key else TOL["hours"]) for key in METRICS]
+        for key in ("slope_deg", "roughness_m", "elevation_m"):
+            if key in alternative.get("terrain", {}):
+                errors.append(abs(float(tile[key][index]) - alternative["terrain"][key]) / 1e-6)
+        rep.add("features", label, max(errors) <= 1, err=max(errors), tol=1,
+                repro={"site": identifier, "window": window})
 
 
 def suite_curated(ctx, rep):
@@ -541,6 +657,12 @@ def self_test(args) -> int:
         print("self-test needs a result JSON with candidates")
         return 2
     path, res = base[0]
+    clean = run_once(ctx, [(path, res)], args.seed, 4)
+    if clean.failed():
+        print("self-test requires a clean unmodified result; baseline failures:")
+        for failure in clean.failed():
+            print(f"  {failure['suite']}: {failure['check']}")
+        return 1
     missed = []
     muts = dict(MUTATIONS)
     if res["candidates"][0].get("power"):
@@ -605,7 +727,7 @@ def apply_baseline(rep: Report, path: Path, update: bool):
 def write_report(rep: Report, out: Path, meta: dict):
     out.mkdir(parents=True, exist_ok=True)
     (out / "verify-report.json").write_text(json.dumps({"meta": meta, "summary": rep.summary(), "checks": rep.rows}, indent=1, default=str))
-    lines = [f"# lumen-verify report", "", f"Run {meta['utc']} · seed {meta['seed']} · iterations {meta['iterations']}", "",
+    lines = ["# lumen-verify report", "", f"Run {meta['utc']} · seed {meta['seed']} · iterations {meta['iterations']}", "",
              f"**{rep.summary()['pass']} pass · {rep.summary()['fail']} fail · {rep.summary()['skip']} skip**", "",
              "| Suite | Check | Status | Max error | Tolerance | Detail |", "|---|---|---|---|---|---|"]
     for r in sorted(rep.rows, key=lambda r: ({"fail": 0, "skip": 2, "pass": 1}[r["status"]], r["suite"])):
@@ -646,20 +768,19 @@ def main(argv=None):
     results = load_results(args.result)
     t0 = time.time()
     combined = Report()
-    seed, sample, clean = args.seed, args.sample, 0
+    seed, sample = args.seed, args.sample
     for it in range(1, 1000):
         rep = run_once(ctx, results if it == 1 else [], seed, sample)
         combined.rows += rep.rows if it == 1 else [r for r in rep.rows if r["suite"] in ("cache", "metamorphic")]
         if rep.failed():
             print(f"iteration {it}: {len(rep.failed())} failure(s) — stopping with reproduction")
             break
-        clean += 1
         print(f"iteration {it}: clean (seed {seed}, sample {sample})")
-        if clean >= args.iterate:
+        if it >= args.iterate:
             break
         seed, sample = seed + 1, int(sample * 1.5)
     apply_baseline(combined, Path(args.baseline), args.update_baseline)
-    meta = {"utc": datetime.now(timezone.utc).isoformat(), "seed": args.seed, "iterations": it,
+    meta = {"utc": datetime.now(UTC).isoformat(), "seed": args.seed, "iterations": it,
             "results": args.result, "cache": args.cache, "seconds": round(time.time() - t0, 1)}
     write_report(combined, Path(args.report), meta)
     sm = combined.summary()

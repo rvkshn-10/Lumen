@@ -12,14 +12,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import reference_models as ref  # noqa: E402
-from oracle_ephemeris import Ephemeris, local_sky  # noqa: E402
+import reference_models as ref
+from oracle_ephemeris import Ephemeris, local_sky
 
 ROOT = Path(__file__).resolve().parents[2]
 ANCHORS = {"slope_deg": None, "roughness_m": None, "elevation_m": None}
@@ -42,7 +42,7 @@ def main():
     anchors = json.loads(Path(a.anchors_from).read_text())["provenance"]["score_anchors"]["bounds"]
     eph = Ephemeris(Path(a.kernels))
     tile = np.load(a.tile)
-    start = datetime.fromisoformat(a.start.replace("Z", "+00:00"))
+    start = datetime.fromisoformat(a.start)
     end = start + timedelta(days=a.days)
     times = [start + timedelta(minutes=5 * i) for i in range(a.days * 288 + 1)]
     et = np.array([eph.utc_to_et(t) for t in times])

@@ -26,6 +26,7 @@ from app.services.ephemeris import (
 from app.services.proximity import science_utility, with_proximity
 from app.services.repository import is_tiled, load_area, selected_metrics
 from app.services.scoring_reference import scoring_reference
+from app.services.suitability import LEGEND, suitability_class
 from app.services.validation import SearchValidationError, validate_search
 from app.settings import settings
 
@@ -470,6 +471,13 @@ def search(request: SearchRequest, *, timings: dict | None = None) -> dict:
     candidates = []
     for rank, (score, site_id, i, scores, metrics) in enumerate(selected, 1):
         detail = analyze(arrays, i, times, sun, earth, timeline=True)
+        from app.services.candidate_extras import enrich
+        from app.services.sites import visible_at
+
+        sun_distance = local_sky(float(arrays["lat_deg"][i]), float(arrays["lon_deg"][i]),
+                                 float(arrays["elevation_m"][i]), sun)[2]
+        enrich(detail, request, lambda instant, body, index=i: visible_at(arrays, index, instant, body),
+               sun_distance=sun_distance)
         candidates.append(
             {
                 "id": site_id,
@@ -492,7 +500,10 @@ def search(request: SearchRequest, *, timings: dict | None = None) -> dict:
         )
     request_json = request.model_dump(mode="json")
     provenance = {
-        "engine_version": "exploration-1.1.0",
+        "engine_version": "exploration-2.0.0",
+        "power_model": "ideal-direct-solar-1",
+        "event_refinement_seconds": 60,
+        "dte_margin_deg": request.dte_margin_deg,
         "terrain": metadata,
         "kernels": list(kernels),
         "calculation_frame": FRAME,
@@ -537,6 +548,7 @@ def search(request: SearchRequest, *, timings: dict | None = None) -> dict:
                 "latitude_deg": float(arrays["lat_deg"][i]),
                 "longitude_deg_east": float(arrays["lon_deg"][i]),
                 "score": score,
+                "suitability_class": int(suitability_class(score)),
                 "illumination_fraction": metrics["illumination_fraction"],
                 "earth_visibility_fraction": metrics["earth_visibility_fraction"],
                 "slope_deg": float(arrays["slope_deg"][i]),
@@ -572,6 +584,12 @@ def search(request: SearchRequest, *, timings: dict | None = None) -> dict:
             "step_minutes": 5,
         },
     }
+    result["suitability_legend"] = LEGEND
+    result["alternatives"] = []
+    if not candidates and mask.any():
+        from app.services.alternatives import search_alternatives
+
+        result["alternatives"] = search_alternatives(request, arrays, mask, times, sun, earth)
     if not candidates:
         result["empty_reason"] = (
             "No prepared candidates intersect the selected region."

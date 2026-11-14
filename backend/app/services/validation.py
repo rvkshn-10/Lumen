@@ -80,7 +80,7 @@ def _estimate_candidates(request: SearchRequest) -> int:
     return round(area_km2 / CANDIDATE_SPACING_KM**2)
 
 
-def validate_search(request: SearchRequest) -> SearchValidationResponse:
+def validate_search(request: SearchRequest, *, point_only: bool = False) -> SearchValidationResponse:
     region_assumptions: list[str] = []
     if request.region.selector_type == SelectorType.feature_radius:
         try:
@@ -107,6 +107,10 @@ def validate_search(request: SearchRequest) -> SearchValidationResponse:
     start = _as_utc(request.time_range.start_utc)
     end = _as_utc(request.time_range.end_utc)
     request.time_range.start_utc, request.time_range.end_utc = start, end
+    if request.scrub_time_utc is not None:
+        request.scrub_time_utc = _as_utc(request.scrub_time_utc)
+        if not start <= request.scrub_time_utc <= end:
+            raise SearchValidationError("Scrub time must be inside the mission window.")
 
     if start >= end:
         raise SearchValidationError("The mission start must be earlier than the mission end.")
@@ -116,7 +120,7 @@ def validate_search(request: SearchRequest) -> SearchValidationResponse:
         raise SearchValidationError("Mission dates must fall within the validated 2025–2035 range.")
 
     constraints = request.hard_constraints
-    if is_tiled(settings.data_root):
+    if is_tiled(settings.data_root) and not point_only:
         if request.region.selector_type == SelectorType.full_supported_region:
             if start != datetime(2028, 10, 1, tzinfo=UTC) or end != datetime(2028, 10, 31, tzinfo=UTC):
                 raise SearchValidationError("The full cap demo uses exactly October 1–31, 2028; choose a local circle for other dates.")

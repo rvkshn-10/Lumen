@@ -5,9 +5,12 @@ converged light time + stellar aberration, and reproduces Lumen's local
 az/el without calling CSPICE. Used to cross-check the app's ephemeris path.
 """
 from __future__ import annotations
-import struct, re
-from datetime import datetime, timezone
+
+import re
+import struct
+from datetime import UTC, datetime
 from pathlib import Path
+
 import numpy as np
 
 C_KMS = 299792.458
@@ -16,7 +19,7 @@ AS2R = np.pi / 180 / 3600
 
 class DAF:
     def __init__(self, path):
-        self.f = open(path, "rb").read()
+        self.f = Path(path).read_bytes()
         nd, ni = struct.unpack("<ii", self.f[8:16])
         self.nd, self.ni = nd, ni
         fward = struct.unpack("<i", self.f[76:80])[0]
@@ -25,7 +28,7 @@ class DAF:
         rec = fward
         while rec:
             base = (rec - 1) * 1024
-            nxt, prv, nsum = struct.unpack("<3d", self.f[base:base + 24])
+            nxt, _prv, nsum = struct.unpack("<3d", self.f[base:base + 24])
             for i in range(int(nsum)):
                 off = base + 24 + i * ss * 8
                 dc = struct.unpack(f"<{nd}d", self.f[off:off + nd * 8])
@@ -86,17 +89,22 @@ class Ephemeris:
     @staticmethod
     def _leaps(path):
         txt = path.read_text()
-        block = re.search(r"DELTET/DELTA_AT\s*=\s*\((.*?)\)", txt, re.S).group(1)
+        block = re.search(r"DELTET/DELTA_AT\s*=\s*\((.*?)\)", txt, re.DOTALL).group(1)
         pairs = re.findall(r"(\d+),\s*@(\d{4})-([A-Z]{3})-(\d+)", block)
-        mon = dict(JAN=1, FEB=2, MAR=3, APR=4, MAY=5, JUN=6, JUL=7, AUG=8, SEP=9, OCT=10, NOV=11, DEC=12)
-        return [(datetime(int(y), mon[m], int(d), tzinfo=timezone.utc), int(n)) for n, y, m, d in pairs]
+        mon = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+               "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
+        return [(datetime(int(y), mon[m], int(d), tzinfo=UTC), int(n)) for n, y, m, d in pairs]
 
     def utc_to_et(self, t: datetime):
-        t = t.astimezone(timezone.utc)
-        # Pre-1972 UTC used fractional steps; 10 s is within ~4 s of TAI-UTC there,
-        # i.e. < 0.001 deg of Sun motion. Adequate for historic-mission replay only.
-        dat = max((n for d, n in self.delta_at if d <= t), default=10)
-        j2000 = datetime(2000, 1, 1, 12, tzinfo=timezone.utc)
+        if t.tzinfo is None:
+            raise ValueError("Oracle UTC dates require an explicit offset")
+        t = t.astimezone(UTC)
+        # Match NAIF's documented uniform-day pre-1972 UTC convention, not a
+        # reconstruction of historical fractional UTC. Before its first LSK
+        # entry SPICE uses one second less than that entry (9 s for naif0012).
+        # The former 10 s fallback shifted all historic oracle samples by 1 s.
+        dat = max((n for d, n in self.delta_at if d <= t), default=self.delta_at[0][1] - 1)
+        j2000 = datetime(2000, 1, 1, 12, tzinfo=UTC)
         tai_like = (t - j2000).total_seconds() + dat + 32.184
         # periodic TDB-TT term (naif0012 K, EB, M)
         M = 6.239996 + 1.99096871e-7 * tai_like

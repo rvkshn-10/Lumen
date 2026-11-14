@@ -48,4 +48,25 @@ Angles 1e-6°; fractions 1e-9; hours 1e-6 h; score 1e-6 points; power relative 1
 
 ## Known limits of the checker
 
-The oracle shares inputs with the app (kernels, horizon profiles), so it catches *computation* errors, not DEM or kernel errors. The DEM is cross-checked separately by `scripts/data/verify_cap_reference.py`. Pre-1972 UTC uses ΔAT = 10 s (< 0.001° Sun error), which is acceptable for historic replay only.
+The oracle shares inputs with the app (kernels, horizon profiles), so it catches *computation* errors, not DEM or kernel errors. The DEM is cross-checked separately by `scripts/data/verify_cap_reference.py`.
+
+Track A corrects the oracle's former pre-1972 fallback of 10 seconds to the pinned
+NAIF convention: before the first LSK entry, use that entry minus one second
+(9 seconds for `naif0012.tls`). The previous fallback produced a one-second offset
+against CSPICE and measurable historic Earth-angle and power differences. This
+does not reconstruct historical fractional UTC. NAIF documents its pre-1972
+uniform-day approximation in [UTC-to-ET conversion](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/utc2et_c.html).
+Regression tests compare 1966, 1969, 1971, 1972, 2017 and 2028 conversions against
+the pinned implementation within two microseconds. Future-mission results and
+the `reference_models.py` scientific formulas are unchanged.
+
+## Track A additions
+
+The feature suite now also checks horizontal-array power and energy, bucket
+battery results, Sun distance, DTE-margin flags/metrics, and scrub-relative next
+events. Explicit single-constraint relaxations are checked against their
+disclosed effective request; all other suggestions retain every original limit.
+The self-test first requires an unmodified clean result, preventing pre-existing
+failures from masquerading as mutation detection. Comparison, fixed-site and
+historic replay exports are accepted without search-only rank/separation checks.
+See [Track A evidence commands](track-a-science.md#verification-and-handoff).

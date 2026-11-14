@@ -13,6 +13,7 @@ from app.services.ephemeris import load_kernels
 from app.services.repository import is_tiled, read_asset, release_metadata
 from app.services.search import search
 from app.services.sites import SiteNotFound, scenario_analysis, site_analysis
+from app.services.terrain_store import UnknownSite
 from app.services.validation import SearchValidationError, validate_search
 from app.settings import settings
 
@@ -145,7 +146,7 @@ def candidate_search_calculation(request: SearchRequest) -> dict:
 def inspect_site(site_id: str, request: SearchRequest) -> dict:
     try:
         return site_analysis(site_id, request)
-    except SiteNotFound as exc:
+    except (SiteNotFound, UnknownSite) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SearchValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -159,7 +160,7 @@ def inspect_site(site_id: str, request: SearchRequest) -> dict:
 def inspect_scenarios(request: ScenarioRequest) -> dict:
     try:
         return scenario_analysis(request)
-    except SiteNotFound as exc:
+    except (SiteNotFound, UnknownSite) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SearchValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
