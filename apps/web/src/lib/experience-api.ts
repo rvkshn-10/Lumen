@@ -5,9 +5,12 @@ export interface CuratedSite {
   latitude_deg: number; longitude_deg_east: number; landing_utc?: string;
   analysis: "detailed" | "coarse"; source_url: string; blurb: string;
 }
+type ReplaySample = Pick<TimeSample, "time_utc" | "sun_elevation_deg"> & Partial<Pick<TimeSample, "earth_elevation_deg" | "earth_visible" | "sun_visible">>;
+
 export interface Replay {
   landing_utc?: string;
-  timeline: Pick<TimeSample, "time_utc" | "sun_elevation_deg">[];
+  timeline: ReplaySample[];
+  missionTimeline?: ReplaySample[];
 }
 
 async function read<T>(path: string, signal: AbortSignal, post = false): Promise<T> {
@@ -23,11 +26,12 @@ export async function getCuratedSites(signal: AbortSignal) {
   }
   return (await read<{ sites: CuratedSite[] }>("curated-sites", signal)).sites;
 }
-export async function getHistoricReplay(id: string, signal: AbortSignal) {
+export async function getHistoricReplay(id: string, signal: AbortSignal): Promise<Replay> {
   if (import.meta.env.VITE_LUMEN_MOCK === "1") {
     const { mockReplay } = await import("./scenario-mock");
     return mockReplay();
   }
-  const result = await read<{ landing_utc: string; landing_day: Replay }>(`historic/${encodeURIComponent(id)}/replay`, signal, true);
-  return { landing_utc: result.landing_utc, timeline: result.landing_day.timeline };
+  const result = await read<{ landing_utc: string; landing_day: Replay; mission_window?: Replay }>(
+    `historic/${encodeURIComponent(id)}/replay`, signal, true);
+  return { landing_utc: result.landing_utc, timeline: result.landing_day.timeline, missionTimeline: result.mission_window?.timeline };
 }

@@ -2,10 +2,13 @@ import { getSiteAnalysis } from "./api";
 import { isMissionRequest } from "./missions";
 import { withinSearchDeadline } from "./deadline";
 import { canonical } from "./planning";
-import type { Alternative as ContractAlternative, BodyEvent, Candidate, SearchRequest, SearchResponse, TimeSample, VisibilityInterval } from "./types";
+import type { Alternative as ContractAlternative, BodyEvent, Candidate, SearchRequest, SearchResponse, SiteDetail, TimeSample, VisibilityInterval } from "./types";
 
 export type LunarEvent = BodyEvent;
-export type ScenarioSite = Candidate & { visibilityIntervals?: { sun: VisibilityInterval[]; earth: VisibilityInterval[] } };
+export type ScenarioSite = Candidate & {
+  visibilityIntervals?: { sun: VisibilityInterval[]; earth: VisibilityInterval[] };
+  constraintStatus?: SiteDetail["constraint_status"];
+};
 export interface Scenario {
   key: string;
   site: ScenarioSite;
@@ -66,12 +69,12 @@ export function visibilityRuns(site: ScenarioSite, request: SearchRequest, key: 
   return runs;
 }
 
-export async function loadScenario(id: string, request: SearchRequest, signal: AbortSignal): Promise<Scenario> {
+export async function loadScenario(id: string, request: SearchRequest, signal: AbortSignal, includeAlternatives = true): Promise<Scenario> {
   if (import.meta.env.VITE_LUMEN_MOCK === "1") {
     const { mockScenario } = await import("./scenario-mock");
     return mockScenario(id, request);
   }
-  const detail = await withinSearchDeadline(signal, active => getSiteAnalysis(id, request, active)) as Awaited<ReturnType<typeof getSiteAnalysis>>
+  const detail = await withinSearchDeadline(signal, active => getSiteAnalysis(id, request, active, includeAlternatives)) as Awaited<ReturnType<typeof getSiteAnalysis>>
     & Pick<ScenarioSite, "events" | "power" | "score" | "criteria_scores">
     & { refinement: { transitions?: { body: "sun" | "earth"; visible_after: boolean; time_utc: string; bracket_seconds: number }[] } };
   const events = detail.events ?? detail.refinement.transitions?.map((event): LunarEvent => ({
@@ -81,7 +84,7 @@ export async function loadScenario(id: string, request: SearchRequest, signal: A
   const applied = detail.request ?? request;
   return { key: scenarioKey(id, applied), request: applied,
     site: { ...detail.site, rank: 0, score: detail.score, criteria_scores: detail.criteria_scores,
-      metrics: detail.metrics, timeline: detail.timeline, horizon: detail.horizon, events, visibilityIntervals: detail.intervals, power: detail.power, dte: detail.dte } };
+      metrics: detail.metrics, timeline: detail.timeline, horizon: detail.horizon, events, visibilityIntervals: detail.intervals, constraintStatus: detail.constraint_status, power: detail.power, dte: detail.dte } };
 }
 
 export function alternativeScenario(alternative: Alternative, fallback?: SearchRequest) {

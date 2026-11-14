@@ -13,6 +13,16 @@ describe("scenario comparisons", () => {
     expect(shifted.hard_constraints).toEqual(request.hard_constraints);
   });
 
+  it("retains a fixed site's operating conditions across the launch-slip dates", () => {
+    const planned = { ...request, power: { load_w: 120, capacity_wh: 500 }, dte_margin_deg: 3,
+      scrub_time_utc: "2028-10-11T03:00:00Z" };
+    const delayed = scenarioWindow(planned, "2028-10-08T00:00:00Z");
+    expect(delayed.time_range).toEqual({ start_utc: "2028-10-08T00:00:00.000Z", end_utc: "2028-10-15T00:00:00.000Z" });
+    expect(delayed).toMatchObject({ region: planned.region, hard_constraints: planned.hard_constraints,
+      preferences: planned.preferences, power: planned.power, dte_margin_deg: 3 });
+    expect(delayed.scrub_time_utc).toBeUndefined();
+  });
+
   it("uses supplied events and estimates legacy transitions from samples", () => {
     const start = Date.parse(request.time_range.start_utc);
     expect(nextEvent(row.site, "sunset", start)).toEqual(row.site.events?.[0]);

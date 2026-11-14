@@ -23,8 +23,10 @@ export function getSiteAnalysis(
   id: string,
   request: SearchRequest,
   signal?: AbortSignal,
+  includeAlternatives = true,
 ): Promise<SiteDetail> {
-  return fetch(`${API_BASE}/sites/${encodeURIComponent(id)}/analysis`, {
+  const analysisUrl = `${API_BASE}/sites/${encodeURIComponent(id)}/analysis`;
+  return fetch(includeAlternatives ? analysisUrl : `${analysisUrl}?include_alternatives=false`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
