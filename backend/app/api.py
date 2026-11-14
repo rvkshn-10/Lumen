@@ -143,9 +143,9 @@ def candidate_search_calculation(request: SearchRequest) -> dict:
 
 
 @router.post("/sites/{site_id}/analysis")
-def inspect_site(site_id: str, request: SearchRequest) -> dict:
+def inspect_site(site_id: str, request: SearchRequest, include_alternatives: bool = True) -> dict:
     try:
-        return site_analysis(site_id, request)
+        return site_analysis(site_id, request, include_alternatives=include_alternatives)
     except (SiteNotFound, UnknownSite) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SearchValidationError as exc:

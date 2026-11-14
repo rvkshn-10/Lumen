@@ -110,3 +110,41 @@ def test_disk_cache_survives_worker_boundaries_and_fails_closed_on_damage(tmp_pa
     next(tmp_path.glob("*.json.gz")).write_bytes(b"corrupt")
     assert cached_result("compare", "request", "sources", calculation, root=tmp_path) == {"metric": 2}
     assert cached_result("compare", "request", "new sources", calculation, root=tmp_path) == {"metric": 3}
+
+
+def test_powered_contact_clips_at_battery_outage_and_does_not_restart():
+    start = datetime(2028, 10, 1, tzinfo=UTC)
+    times = [start + timedelta(minutes=m) for m in (0, 5, 10, 15, 20)]
+    timeline = [{"time_utc": t.isoformat(), "sun_elevation_deg": 0,
+                 "sun_distance_km": reference.AU_KM, "solar_fraction": f}
+                for t, f in zip(times, (0, 0, 1, 1, 0), strict=True)]
+    # At a 120 W load an initial reserve of 15 Wh lasts 7.5 minutes.
+    estimate = power_estimate(timeline, PowerSettings(load_w=120, capacity_wh=15),
+                              dte_states=[False, True, True, True, True])
+    contact = estimate["powered_contact"]
+    outage = start + timedelta(minutes=7, seconds=30)
+    assert contact["first_depletion_utc"] == outage.isoformat()
+    assert contact["longest_contact_hours"] == pytest.approx(2.5 / 60)
+    assert contact["windows"] == [{"start_utc": times[1].isoformat(),
+                                   "end_utc": outage.isoformat(),
+                                   "duration_hours": pytest.approx(2.5 / 60)}]
+    assert contact["dte_windows"][0]["end_utc"] == times[-1].isoformat()
+    assert contact["min_reserve_wh"] == 0
+    assert contact["reserve_series"][-1] == {"time_utc": outage.isoformat(), "reserve_wh": 0}
+
+
+def test_powered_contact_does_not_bridge_dte_gaps_or_count_terminal_sample():
+    start = datetime(2028, 10, 1, tzinfo=UTC)
+    times = [start + timedelta(minutes=5 * i) for i in range(5)]
+    # A zero-charge battery can operate on uninterrupted direct solar generation.
+    timeline = [{"time_utc": t.isoformat(), "sun_elevation_deg": 0,
+                 "sun_distance_km": reference.AU_KM, "solar_fraction": 1}
+                for t in times]
+    contact = power_estimate(timeline, PowerSettings(start_soc=0),
+                             dte_states=[True, False, True, True, False])["powered_contact"]
+    assert contact["first_depletion_utc"] is None
+    assert contact["min_reserve_wh"] == 0
+    assert contact["longest_contact_hours"] == pytest.approx(10 / 60)
+    assert [(item["start_utc"], item["end_utc"]) for item in contact["windows"]] == [
+        (times[0].isoformat(), times[1].isoformat()), (times[2].isoformat(), times[4].isoformat())
+    ]
