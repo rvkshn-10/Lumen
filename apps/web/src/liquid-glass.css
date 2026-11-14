@@ -1,0 +1,167 @@
+/* Dark glass for structural surfaces, with a brighter edge along the top. */
+#top {
+  --glass-panel: #1b2a25;
+  --glass-tint: rgb(22 35 31 / 81%);
+  --glass-light: linear-gradient(155deg, #c3f8df24, #c3f8df00 56%);
+  --glass-edge: #759e8b66;
+  --glass-rim: inset 0 1px #d6ffeb36, inset 0 -1px #0004;
+  background:
+    radial-gradient(ellipse 750px 470px at 12% 0, #274236, transparent),
+    radial-gradient(ellipse 620px 420px at 92% 9%, #203238, transparent),
+    #101514;
+  display: flow-root;
+  min-height: 100dvh;
+}
+
+#top .topbar,
+.guided-planner .guide-steps,
+.guided-planner details.area-editor,
+.guided-planner .scene-navigation > button {
+  background: var(--glass-light), var(--glass-panel);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-rim), 0 12px 28px #0004;
+}
+
+#top .topbar {
+  max-width: 1494px;
+  margin: 12px max(12px, calc((100% - 1494px) / 2)) 0;
+  min-height: 58px;
+  height: auto;
+  padding-block: 10px;
+  border-radius: 24px;
+}
+
+#top .brand-caption { color: #b8cec3; }
+
+.guided-planner .guide-data-badge {
+  background: #1c322a;
+  border-color: var(--glass-edge);
+  box-shadow: var(--glass-rim);
+}
+
+.guided-planner .guide-steps {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 5px;
+  border-radius: 20px;
+}
+
+.guided-planner .guide-steps button {
+  align-self: stretch;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  color: #dceae2;
+  font-weight: 600;
+}
+
+.guided-planner .guide-steps button:focus-visible { outline-offset: -3px; }
+.guided-planner .guide-steps button:disabled { opacity: .58; }
+.guided-planner .guide-steps button:hover:not(:disabled):not([aria-current]) {
+  background: #d6ffeb16;
+}
+
+.guided-planner .guide-steps [aria-current="step"] {
+  background: linear-gradient(150deg, #d4f4df, #97c8ad);
+  border-color: #d8ffee;
+  color: #10291e;
+  box-shadow: inset 0 1px #fff9, 0 2px 6px #0004;
+}
+
+.guided-planner details.area-editor { border-radius: 20px; }
+.guided-planner .area-editor > summary > span { color: #b3d3c2; }
+
+.guided-planner .orbital-scene {
+  border-radius: 22px;
+  box-shadow: 0 14px 38px #0005;
+}
+
+.guided-planner .orbital-scene:is(.immersive, :fullscreen) { border-radius: 0; }
+
+.guided-planner .orbital-toolbar {
+  background: linear-gradient(165deg, #213831, #142320 66%);
+  box-shadow: inset 0 1px #d6ffeb27;
+}
+
+.guided-planner .scene-navigation > button {
+  border-radius: 999px;
+  color: #ecfff3;
+  min-height: 44px;
+}
+
+.guided-planner .scene-navigation > button:hover:not(:disabled):not([aria-pressed="true"]) {
+  background-color: #345448;
+  border-color: #a5d7bc;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .guided-planner .guide-steps,
+  .guided-planner details.area-editor {
+    background-color: var(--glass-tint);
+    -webkit-backdrop-filter: blur(20px) saturate(135%);
+    backdrop-filter: blur(20px) saturate(135%);
+  }
+
+  .guided-planner .scene-navigation > button:not([aria-pressed="true"]) {
+    background-color: var(--glass-tint);
+    -webkit-backdrop-filter: blur(12px) saturate(145%);
+    backdrop-filter: blur(12px) saturate(145%);
+  }
+
+  .guided-planner .planning-dialog::backdrop {
+    background: #07120dd1;
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+}
+
+.guided-planner .orbital-toolbar button,
+.guided-planner .area-view-switch button,
+.guided-planner .guide-actions :is(.primary-button, .secondary-button),
+.guided-planner .planning-dialog-header button {
+  border-radius: 999px;
+}
+
+.guided-planner .area-view-switch button { min-height: 44px; }
+
+.guided-planner .guide-actions .primary-button {
+  background: linear-gradient(165deg, #d1f7db, #96cbaa);
+  box-shadow: inset 0 1px #fff9, 0 4px 12px #0004;
+}
+
+.guided-planner .guide-actions .primary-button:hover:not(:disabled) {
+  background: linear-gradient(165deg, #e0ffea, #a9dcb9);
+}
+
+.guided-planner .preset-grid button {
+  border-radius: 16px;
+  box-shadow: inset 0 1px #d6ffeb27;
+}
+
+.guided-planner .planning-dialog {
+  background: linear-gradient(155deg, #233831, #131c17 52%);
+  border-radius: 24px;
+  box-shadow: var(--glass-rim), 0 24px 72px #0008;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .guided-planner :is(.guide-steps, .area-view-switch, .scene-navigation, .guide-actions) button {
+    transition: scale 120ms ease-out, background-color 160ms ease, border-color 160ms ease;
+  }
+
+  .guided-planner :is(.guide-steps, .area-view-switch, .scene-navigation, .guide-actions) button:active:not(:disabled) {
+    scale: .97;
+  }
+}
+
+/* Let the scene grow when the timeline and source controls wrap on phones. */
+@media (max-width: 480px) {
+  .guided-planner .area-layout .area-3d-preview:has(.orbital-scene:not(.immersive)) {
+    height: auto;
+  }
+
+  .guided-planner .area-layout .orbital-scene:not(.immersive) {
+    height: auto;
+    min-height: 660px;
+  }
+}
