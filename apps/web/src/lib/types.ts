@@ -244,6 +244,19 @@ export interface PowerSettings {
   capacity_wh?: number;
   start_soc?: number;
 }
+export interface PoweredContactWindow {
+  start_utc: string;
+  end_utc: string;
+  duration_hours: number;
+}
+export interface PoweredContactResult {
+  windows: PoweredContactWindow[];
+  dte_windows: PoweredContactWindow[];
+  longest_contact_hours: number;
+  first_depletion_utc: string | null;
+  min_reserve_wh: number;
+  reserve_series: { time_utc: string; reserve_wh: number }[];
+}
 export interface PowerEstimate {
   assumptions: { area_m2: number; efficiency: number; mount: "vertical_tracking";
     solar_constant_w_m2: number; integration?: string; excludes?: string[] };
@@ -252,6 +265,7 @@ export interface PowerEstimate {
   horizontal_energy_wh: number;
   battery?: { min_soc_wh: number; depleted_index: number | null; load_w: number;
     capacity_wh: number; start_soc: number };
+  powered_contact?: PoweredContactResult;
 }
 export interface BodyEvent {
   type: "sunrise" | "sunset" | "earthrise" | "earthset";
