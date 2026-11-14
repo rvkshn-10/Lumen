@@ -28,7 +28,7 @@ export function mockScenario(id: string, request: SearchRequest): Scenario {
     metrics: { illumination_fraction: sunset / duration, mean_visible_solar_disk_fraction: sunset / duration,
       earth_visibility_fraction: earthset / duration, longest_sunlight_hours: sunset, longest_darkness_hours: duration - sunset,
       longest_communication_hours: earthset, longest_blackout_hours: duration - earthset },
-    timeline, horizon: [], power: { assumptions: { area_m2: 1, efficiency: .3, mount: "vertical tracking" },
+    timeline, horizon: [], power: { assumptions: { area_m2: 1, efficiency: .3, mount: "vertical_tracking", solar_constant_w_m2: 1361 },
       series, energy_wh: integrate("vertical_w"), horizontal_energy_wh: integrate("horizontal_w") },
     events: [{ type: "sunset", time_utc: at(sunset), uncertainty_minutes: 1 },
       { type: "earthset", time_utc: at(earthset), uncertainty_minutes: 1 }],

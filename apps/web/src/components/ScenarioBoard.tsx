@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { coordinate, downloadTimelineCsv, hours, percent, utcTime } from "../lib/format";
 import { scenarioVerdict } from "../lib/explanations";
-import { COMPARE_LIMIT, HOUR_MS, MAX_SCENARIOS, SITE_COLORS, batteryMargin, loadScenario, nextEvent, sampledEvents, scenarioKey, scenarioShareHash, scenarioWindow, visibilityRuns } from "../lib/scenarios";
+import { COMPARE_LIMIT, MAX_SCENARIOS, SITE_COLORS, alternativeScenario, batteryMargin, loadScenario, nextEvent, sampledEvents, scenarioKey, scenarioShareHash, scenarioWindow, visibilityRuns } from "../lib/scenarios";
 import type { Candidate } from "../lib/types";
 import type { Alternative, Audience, Scenario, ScenarioResult } from "../lib/scenarios";
 import "./scenario-board.css";
@@ -161,15 +161,8 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
   }
   function useAlternative(alternative: Alternative) {
     const base = rows.find(row => row.site.id === alternative.for_site);
-    const request = alternative.request ?? base?.request ?? result?.request;
-    if (!request) return;
-    if (alternative.kind === "nearby" && alternative.site_id) return add(alternative.site_id, request);
-    if (alternative.kind === "shifted_window" && alternative.request) return add(alternative.for_site, alternative.request, base && label(base));
-    if (alternative.kind === "shifted_window" && alternative.shift_hours != null) {
-      const shifted = Date.parse(request.time_range.start_utc) + alternative.shift_hours * HOUR_MS;
-      return add(alternative.for_site, scenarioWindow(request, new Date(shifted).toISOString()), base && label(base));
-    }
-    if (alternative.kind === "relaxed" && alternative.request) return add(alternative.for_site, alternative.request, base ? `${label(base)} · adjusted limit` : "Adjusted limit");
+    const target = alternativeScenario(alternative, base?.request ?? result?.request);
+    if (target) return add(target.id, target.request);
     setError("This suggestion is missing the target site or request needed to analyze it.");
   }
   const shareLink = sharing && rows.length ? new URL(scenarioShareHash(rows), window.location.href).href : "";
@@ -244,11 +237,11 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
       {!result.alternatives?.length ? <p>No alternatives were returned for this mission. You can edit the area, dates, or required limits and analyze again.</p> :
         <div className="scenario-alternative-grid">{result.alternatives.slice(0, 3).map(alternative => {
           const base = rows.find(row => row.site.id === alternative.for_site);
-          return <article key={alternative.id}><strong>{({ nearby: "Nearby site", shifted_window: "Shift the dates", relaxed: "Adjust a limit" })[alternative.kind]}</strong>
+          return <article key={alternative.suggestion_id ?? `${alternative.kind}-${alternative.id}`}><strong>{({ nearby: "Nearby site", shifted_window: "Shift the dates", relaxed: "Adjust a limit" })[alternative.kind]}</strong>
             <p>{alternative.reason}</p>
             {!!alternative.resolves.length && <p>Addresses {alternative.resolves.map(key => key.replaceAll("_", " ")).join(", ")}.</p>}<ul>{metrics.slice(0, 3).map(metric => {
               if (metric.key === "energy_wh") return null;
-              const after = alternative.metrics[metric.key], before = base?.site.metrics[metric.key];
+              const after = alternative.metrics[metric.key], before = alternative.before_metrics?.[metric.key] ?? base?.site.metrics[metric.key];
               return after == null ? null : <li key={metric.key}>{metric.label}: {before == null ? "" : `${metric.format(before)} → `}{metric.format(after)}</li>;
             })}</ul>
             <button className="secondary-button" disabled={busy || rows.length >= MAX_SCENARIOS} onClick={() => void useAlternative(alternative)}>Use this scenario</button></article>;

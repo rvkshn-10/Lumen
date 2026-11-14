@@ -1,31 +1,19 @@
 import { getSiteAnalysis } from "./api";
 import { isMissionRequest } from "./missions";
 import { withinSearchDeadline } from "./deadline";
-import type { Candidate, SearchRequest, SearchResponse, TimeSample } from "./types";
+import { canonical } from "./planning";
+import type { Alternative as ContractAlternative, BodyEvent, Candidate, SearchRequest, SearchResponse, TimeSample } from "./types";
 
 // Optional Track A fields, pending the shared contract merge.
-export type LunarEvent = { type: "sunrise" | "sunset" | "earthrise" | "earthset"; time_utc: string; uncertainty_minutes: number };
-export type ScenarioSite = Candidate & {
-  events?: LunarEvent[];
-  power?: {
-    assumptions: { area_m2: number; efficiency: number; mount: string };
-    series: { time_utc: string; vertical_w: number; horizontal_w: number }[];
-    energy_wh: number;
-    horizontal_energy_wh: number;
-  };
-};
+export type LunarEvent = BodyEvent;
+export type ScenarioSite = Candidate;
 export interface Scenario {
   key: string;
   site: ScenarioSite;
   request: SearchRequest;
   label?: string;
 }
-export type Alternative = {
-  id: string; kind: "nearby" | "shifted_window" | "relaxed"; for_site: string;
-  shift_hours?: number; distance_km?: number; reason: string; resolves: string[];
-  metrics: Partial<Candidate["metrics"]>;
-  site_id?: string; request?: SearchRequest;
-};
+export type Alternative = ContractAlternative & { site_id?: string };
 export type ScenarioResult = SearchResponse & { alternatives?: Alternative[] };
 export type Audience = "Public" | "Educator" | "Planner";
 export const MAX_SCENARIOS = 8;
@@ -34,14 +22,16 @@ export const SITE_COLORS = ["#56b4e9", "#e69f00", "#009e73", "#cc79a7"];
 export const HOUR_MS = 3_600_000;
 
 export function scenarioKey(siteId: string, request: SearchRequest) {
-  return JSON.stringify([siteId, request.time_range, request.hard_constraints, request.preferences]);
+  return canonical([siteId, request.time_range, request.hard_constraints, request.preferences,
+    request.dte_margin_deg ?? 2, { area_m2: 1, efficiency: .3, load_w: 150,
+      capacity_wh: 2000, start_soc: 1, ...request.power }]);
 }
 
 export function scenarioWindow(request: SearchRequest, start: string): SearchRequest {
   const original = request.time_range;
   const startMs = Date.parse(start);
   const endMs = startMs + Date.parse(original.end_utc) - Date.parse(original.start_utc);
-  return { ...request, time_range: { start_utc: new Date(startMs).toISOString(), end_utc: new Date(endMs).toISOString() } };
+  return { ...request, scrub_time_utc: undefined, time_range: { start_utc: new Date(startMs).toISOString(), end_utc: new Date(endMs).toISOString() } };
 }
 
 export function sampledEvents(timeline: TimeSample[]): LunarEvent[] {
@@ -89,9 +79,22 @@ export async function loadScenario(id: string, request: SearchRequest, signal: A
     type: event.body === "sun" ? (event.visible_after ? "sunrise" : "sunset") : (event.visible_after ? "earthrise" : "earthset"),
     time_utc: event.time_utc, uncertainty_minutes: Math.ceil(event.bracket_seconds / 120),
   }));
-  return { key: scenarioKey(id, request), request,
+  const applied = detail.request ?? request;
+  return { key: scenarioKey(id, applied), request: applied,
     site: { ...detail.site, rank: 0, score: detail.score, criteria_scores: detail.criteria_scores,
-      metrics: detail.metrics, timeline: detail.timeline, horizon: detail.horizon, events, power: detail.power } };
+      metrics: detail.metrics, timeline: detail.timeline, horizon: detail.horizon, events, power: detail.power, dte: detail.dte } };
+}
+
+export function alternativeScenario(alternative: Alternative, fallback?: SearchRequest) {
+  const request = alternative.request ?? fallback;
+  if (!request) return null;
+  if (alternative.kind === "nearby") return { id: alternative.site_id ?? alternative.id, request };
+  if (alternative.request) return { id: alternative.for_site, request: alternative.request };
+  if (alternative.kind === "shifted_window" && alternative.shift_hours != null) {
+    return { id: alternative.for_site, request: scenarioWindow(request,
+      new Date(Date.parse(request.time_range.start_utc) + alternative.shift_hours * HOUR_MS).toISOString()) };
+  }
+  return null;
 }
 
 export function batteryMargin(capacityWh: number, loadW: number, darknessHours: number) {

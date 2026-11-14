@@ -38,7 +38,7 @@ interface LayerOptions {
 function pointColor(point: MapCandidate, layer: MapLayer) {
   if (layer === "suitability") {
     const cls = point.suitability_class ?? suitabilityClass(point.score);
-    return new THREE.Color(cls < 0 ? "#3a3f3e" : SUITABILITY_COLORS[cls]);
+    return new THREE.Color(cls === -1 ? "#3a3f3e" : SUITABILITY_COLORS[cls]);
   }
   const value =
     layer === "illumination"

@@ -28,5 +28,6 @@ export async function getHistoricReplay(id: string, signal: AbortSignal) {
     const { mockReplay } = await import("./scenario-mock");
     return mockReplay();
   }
-  return read<Replay>(`historic/${encodeURIComponent(id)}/replay`, signal, true);
+  const result = await read<{ landing_utc: string; landing_day: Replay }>(`historic/${encodeURIComponent(id)}/replay`, signal, true);
+  return { landing_utc: result.landing_utc, timeline: result.landing_day.timeline };
 }
