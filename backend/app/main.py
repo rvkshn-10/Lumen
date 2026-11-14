@@ -8,6 +8,7 @@ from app.api import router
 from app.coverage_api import router as coverage_router
 from app.exploration_api import router as exploration_router
 from app.global_api import router as global_router
+from app.horizon_api import router as horizon_router
 from app.scene_api import router as scene_router
 from app.settings import settings
 from app.v2_api import router as v2_router
@@ -26,6 +27,7 @@ app.include_router(global_router)
 app.include_router(coverage_router)
 app.include_router(scene_router)
 app.include_router(v2_router)
+app.include_router(horizon_router)
 
 
 if settings.static_dir.exists():

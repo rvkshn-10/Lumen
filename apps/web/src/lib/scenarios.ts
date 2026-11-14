@@ -2,11 +2,10 @@ import { getSiteAnalysis } from "./api";
 import { isMissionRequest } from "./missions";
 import { withinSearchDeadline } from "./deadline";
 import { canonical } from "./planning";
-import type { Alternative as ContractAlternative, BodyEvent, Candidate, SearchRequest, SearchResponse, TimeSample } from "./types";
+import type { Alternative as ContractAlternative, BodyEvent, Candidate, SearchRequest, SearchResponse, TimeSample, VisibilityInterval } from "./types";
 
-// Optional Track A fields, pending the shared contract merge.
 export type LunarEvent = BodyEvent;
-export type ScenarioSite = Candidate;
+export type ScenarioSite = Candidate & { visibilityIntervals?: { sun: VisibilityInterval[]; earth: VisibilityInterval[] } };
 export interface Scenario {
   key: string;
   site: ScenarioSite;
@@ -82,7 +81,7 @@ export async function loadScenario(id: string, request: SearchRequest, signal: A
   const applied = detail.request ?? request;
   return { key: scenarioKey(id, applied), request: applied,
     site: { ...detail.site, rank: 0, score: detail.score, criteria_scores: detail.criteria_scores,
-      metrics: detail.metrics, timeline: detail.timeline, horizon: detail.horizon, events, power: detail.power, dte: detail.dte } };
+      metrics: detail.metrics, timeline: detail.timeline, horizon: detail.horizon, events, visibilityIntervals: detail.intervals, power: detail.power, dte: detail.dte } };
 }
 
 export function alternativeScenario(alternative: Alternative, fallback?: SearchRequest) {

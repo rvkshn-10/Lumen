@@ -1,6 +1,6 @@
 # Lumen · NASA Space Apps project page
 
-**Challenge:** [Lunar Landing Site Navigator](https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/)
+**Challenge:** [CLPS Lunar Mission Browser](https://www.spaceappschallenge.org/2026/challenges/clps-lunar-mission-browser/)
 
 ## Project description
 
