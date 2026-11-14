@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Candidate, LunarFeature, MapLayer, PSRLayer, RegionManifest, SearchResponse, TerrainData, TimeSample } from "../lib/types";
-import { Comparison } from "./CandidateResults";
 import { SiteAnalysis } from "./SiteAnalysis";
 import { RefinedInspection } from "./RefinedInspection";
 import { ScenarioLab } from "./ScenarioLab";
@@ -17,8 +16,9 @@ export function PlanningDialog({ title, onClose, children }: { title: string; on
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    dialog.current?.showModal();
-    return () => { dialog.current?.close(); previous?.focus(); };
+    const element = dialog.current;
+    element?.showModal();
+    return () => { element?.close(); previous?.focus(); };
   }, []);
   return <dialog className="planning-dialog" ref={dialog} aria-labelledby="planning-dialog-title" onCancel={onClose} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="planning-dialog-header"><h2 id="planning-dialog-title">{title}</h2><button className="secondary-button" autoFocus onClick={onClose}>Close panel</button></div>{children}
@@ -35,10 +35,6 @@ export function MissionSummary({ result, sites, coverage, onClose, stale }: { re
     <iframe className="mission-summary-frame" ref={frame} srcDoc={html} sandbox="allow-same-origin allow-modals" title="Printable applied mission summary" />
   </PlanningDialog>;
 }
-export function CompareDialog({ sites, result, onClose }: { sites: Candidate[]; result: SearchResponse; onClose: () => void }) {
-  return <PlanningDialog title="Compare two sites in the same mission window" onClose={onClose}><Comparison sites={sites} result={result} onClose={onClose} /></PlanningDialog>;
-}
-
 const sections = ["Overview", "Timeline", "Terrain horizon", "Events & blockers", "Scenarios", "Terrain & sky", "Sources & exports"];
 export function PlanningEvidence({ site, result, terrain, manifest, psr, features, onExplore, onDelay, onClose, stale }: {
   site: Candidate; result: SearchResponse; terrain: TerrainData | null; manifest: RegionManifest | null;

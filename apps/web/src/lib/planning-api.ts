@@ -33,6 +33,10 @@ function wait(signal: AbortSignal) {
   });
 }
 export async function runAnalysis(request: SearchRequest, catalog: CoverageCatalog, signal: AbortSignal, onState: (state: AnalysisState) => void): Promise<SearchResponse> {
+  if (import.meta.env.VITE_LUMEN_MOCK === "1") {
+    const { mockAnalysis } = await import("./scenario-mock");
+    return mockAnalysis(request);
+  }
   try {
     return await withinSearchDeadline(signal, boundedSignal => runAnalysisRequest(request, catalog, boundedSignal, onState));
   } catch (error) {
