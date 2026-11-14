@@ -24,7 +24,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     LUMEN_GLOBAL_ROOT=/app/data/derived/global-preview-v1
 WORKDIR /app
 COPY backend backend
-RUN pip install --no-cache-dir ./backend
+ARG LUMEN_OPENVINO=0
+RUN if [ "$LUMEN_OPENVINO" = "1" ]; then \
+        pip install --no-cache-dir './backend[openvino]'; \
+    else \
+        pip install --no-cache-dir ./backend; \
+    fi
 COPY scripts/data/prepare_kernels.py scripts/data/prepare_kernels.py
 RUN python scripts/data/prepare_kernels.py
 COPY --from=web-build /workspace/apps/web/dist apps/web/dist

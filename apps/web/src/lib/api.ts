@@ -7,6 +7,7 @@ import type {
   FeatureCollection,
   PSRLayer,
   SiteDetail,
+  TimeSample,
 } from "./types";
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
@@ -79,4 +80,63 @@ export function validateSearch(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   }).then(expectJson<SearchValidationResponse>);
+}
+
+export type HorizonSample = Pick<
+  TimeSample,
+  | "time_utc"
+  | "sun_elevation_deg"
+  | "sun_horizon_deg"
+  | "earth_elevation_deg"
+  | "earth_horizon_deg"
+  | "sun_visible"
+  | "earth_visible"
+>;
+
+interface HorizonBand {
+  labels: number;
+  disagreements: number;
+}
+
+export interface HorizonDisagreement {
+  sample_index: number;
+  body: "sun" | "earth";
+  clearance_deg: number;
+  near_horizon: boolean;
+  model_visible: boolean;
+  physics_visible: boolean;
+}
+
+export interface HorizonReviewResult {
+  engine: "OpenVINO";
+  device: string;
+  model: string;
+  samples: number;
+  agreement: number;
+  sun_agreement: number;
+  earth_agreement: number;
+  disagreement_indices: number[];
+  inference_ms?: number;
+  near_horizon_samples?: number;
+  near_horizon_deg?: number;
+  near_horizon?: HorizonBand;
+  outside_horizon_band?: HorizonBand;
+  disagreements?: HorizonDisagreement[];
+  runtime_version?: string;
+}
+
+export async function reviewHorizon(
+  samples: HorizonSample[],
+  signal: AbortSignal,
+): Promise<HorizonReviewResult> {
+  const response = await fetch(`${API_BASE}/ai/horizon-review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ samples }),
+    signal,
+  });
+  if (response.status === 503 || response.status === 404) {
+    throw new Error("OpenVINO review is unavailable on this server.");
+  }
+  return expectJson<HorizonReviewResult>(response);
 }
