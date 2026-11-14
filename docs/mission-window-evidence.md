@@ -31,7 +31,7 @@ On the separate three-point fixture, the nominal clearances alone reproduced the
 | Validity | Inspect a timestamp, trace it to the modeled horizon and record the input limits. The demo discloses the independent check’s scope. | Check additional sites and seasons before generalizing the results. |
 | Relevance | The board compares sites and dates around the two constraints named by the challenge. | Add panel orientation and a radio-link budget only if there are defensible engineering assumptions and tests. |
 
-[Official Lunar Landing Site Navigator challenge](https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/)
+[Official CLPS Lunar Mission Browser challenge](https://www.spaceappschallenge.org/2026/challenges/clps-lunar-mission-browser/)
 
 ## When a selected scenario falls short
 

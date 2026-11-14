@@ -11,7 +11,7 @@ This is a team assessment of the public deployment before the Track C and OpenVI
 | Presentation | 6/10 | The 3D view is clear, but on the public build the planning decision comes after several setup steps. Lead with the demo comparison and use a recording or exported comparison table as backup. |
 | **Total** | **37/50** | An end-to-end demonstration of Track C could reasonably add two presentation points and one relevance point. Re-score after rehearsal. |
 
-Sources: [Official challenge](https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/), [Lumen](https://lumenmissionplanner.earth/), [NASA LOLA lunar south pole products](https://pgda.gsfc.nasa.gov/products/90), [JPL NAIF kernels](https://naif.jpl.nasa.gov/naif/data_generic.html), [independent verifier PR](https://github.com/rvkshn-10/Lumen/pull/2).
+Sources: [Official challenge](https://www.spaceappschallenge.org/2026/challenges/clps-lunar-mission-browser/), [Lumen](https://lumenmissionplanner.earth/), [NASA LOLA lunar south pole products](https://pgda.gsfc.nasa.gov/products/90), [JPL NAIF kernels](https://naif.jpl.nasa.gov/naif/data_generic.html), [independent verifier PR](https://github.com/rvkshn-10/Lumen/pull/2).
 
 ## Rehearsed comparison
 
@@ -32,3 +32,13 @@ These results came from the hosted site-analysis API, using a 5 km circle center
 Keep the live demo to the two point analyses and preload them before presenting. In testing, a full-cap search exceeded 26 seconds and concurrent search requests returned HTTP 429. Keep a local recording or exported board available for the 30-second pitch.
 
 Use the project page to identify what the team built during the event and credit the pre-existing planner and outside dependencies. [2026 event and submission guidance](https://www.spaceappschallenge.org/2026/), [participation terms](https://www.spaceappschallenge.org/legal/).
+
+
+## Feature priorities for the CLPS Lunar Mission Browser
+
+1. **Launch-slip comparison.** At the same prepared site, compare the original window with starts 24 and 72 hours later. Hold mission duration, load, battery capacity, and visibility rules fixed. Show the first tested date that meets the requirements, its longest qualifying interval, and why the other tested dates fall short. Reuse the existing date duplication and bounded site comparison.
+2. **Powered contact window.** Promote the V2 physics outputs into a combined operation view. On a shared timeline, show potential direct-to-Earth geometry, solar generation and battery reserve. Check a user-specified operation length and clearly label the antenna clearance, panel, load, and battery assumptions. Keep the engineering estimates distinct from actual telemetry.
+3. **CLPS missions in the browser.** Give NASA's IM-1, IM-2, and Blue Ghost Mission 1 their own category. Show the contractor, payload, actual and intended destinations when both are verified, and source links. Reuse historic replay and show its coverage level. These three landings are outside the detailed 87°S–90°S cap.
+4. **Which horizon feature causes the cutoff?** Link an Earthset or sunset to the terrain sight line and blocker readout where detailed terrain is available. Carry the scenario, time, model limits, and source data into the evidence export.
+
+The [full challenge brief reproduced by HackAthlone](https://hackathlone.com/challenges/lunar-landing-site-navigator) explicitly calls out schedule changes and rapid comparison as use cases. NASA provides [CLPS mission and payload details](https://science.nasa.gov/lunar-science/clps-deliveries/) and the [observed landing coordinates](https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html).
