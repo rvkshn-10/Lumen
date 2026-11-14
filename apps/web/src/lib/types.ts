@@ -169,6 +169,8 @@ export interface MapCandidate {
   slope_deg: number;
   distance_psr_km?: number;
   criteria_scores?: Candidate["criteria_scores"];
+  /** 0–3 poor→excellent, −1 unknown (v2 contract; derived from score when absent). */
+  suitability_class?: number;
 }
 export type MapLayer =
   | "terrain"
@@ -176,6 +178,7 @@ export type MapLayer =
   | "score"
   | "illumination"
   | "earth_visibility"
+  | "suitability"
   | "psr";
 export interface VisibilityInterval {
   start_utc: string;

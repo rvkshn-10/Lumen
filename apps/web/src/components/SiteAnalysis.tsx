@@ -8,6 +8,7 @@ import {
   downloadTimelineCsv,
 } from "../lib/format";
 import { Icon } from "./Icon";
+import { HorizonPanorama } from "./HorizonPanorama";
 
 function segments(samples: TimeSample[], key: "sun_visible" | "earth_visible") {
   const output: { start: number; end: number; state: boolean }[] = [];
@@ -106,120 +107,6 @@ function Timeline({
         </span>
       </div>
     </div>
-  );
-}
-
-function HorizonChart({
-  site,
-  sample,
-}: {
-  site: Candidate;
-  sample: TimeSample | undefined;
-}) {
-  const points = site.horizon;
-  if (!points.length) return <p className="muted">Horizon unavailable.</p>;
-  const minimum =
-    Math.min(
-      -6,
-      ...points.map((p) => p.elevation_deg),
-      sample?.sun_elevation_deg ?? 0,
-      sample?.earth_elevation_deg ?? 0,
-    ) - 1;
-  const maximum = Math.max(10, ...points.map((p) => p.elevation_deg)) + 1;
-  const x = (az: number) => 38 + (az / 360) * 604;
-  const y = (el: number) => 178 - ((el - minimum) / (maximum - minimum)) * 152;
-  const horizonPath =
-    points
-      .map(
-        (p, i) =>
-          `${i ? "L" : "M"}${x(p.azimuth_deg).toFixed(1)},${y(p.elevation_deg).toFixed(1)}`,
-      )
-      .join(" ") + ` L${x(360)},${y(points[0].elevation_deg)}`;
-  function path(key: "sun" | "earth") {
-    const step = Math.max(1, Math.floor(site.timeline.length / 250));
-    let previous = -1;
-    return site.timeline
-      .filter((_, i) => i % step === 0)
-      .map((p) => {
-        const az = key === "sun" ? p.sun_azimuth_deg : p.earth_azimuth_deg;
-        const el = key === "sun" ? p.sun_elevation_deg : p.earth_elevation_deg;
-        const move = previous < 0 || Math.abs(az - previous) > 180;
-        previous = az;
-        return `${move ? "M" : "L"}${x(az).toFixed(1)},${y(el).toFixed(1)}`;
-      })
-      .join(" ");
-  }
-  return (
-    <svg
-      className="horizon-chart"
-      viewBox="0 0 670 214"
-      role="img"
-      aria-label="Terrain horizon versus Sun and Earth paths across azimuth. Exact selected-time values and terrain table follow."
-    >
-      {[0, 90, 180, 270, 360].map((az, i) => (
-        <g key={az}>
-          <line
-            x1={x(az)}
-            x2={x(az)}
-            y1="26"
-            y2="178"
-            stroke="#2a3435"
-            strokeDasharray="2 5"
-          />
-          <text x={x(az)} y="201" textAnchor="middle">
-            {["N 0°", "E 90°", "S 180°", "W 270°", "N 360°"][i]}
-          </text>
-        </g>
-      ))}
-      {[minimum, 0, maximum].map((el) => (
-        <g key={el}>
-          <line x1="38" x2="642" y1={y(el)} y2={y(el)} stroke="#2a3435" />
-          <text x="29" y={y(el) + 4} textAnchor="end">
-            {Math.round(el)}°
-          </text>
-        </g>
-      ))}
-      <path
-        d={`${horizonPath} L642,178 L38,178 Z`}
-        fill="#384340"
-        fillOpacity=".48"
-      />
-      <path d={horizonPath} fill="none" stroke="#8b9b91" strokeWidth="1.5" />
-      <path
-        d={path("sun")}
-        fill="none"
-        stroke="#dfbb6c"
-        strokeWidth="1.6"
-        opacity=".6"
-      />
-      <path
-        d={path("earth")}
-        fill="none"
-        stroke="#94c4df"
-        strokeWidth="1.6"
-        opacity=".6"
-      />
-      {sample && (
-        <>
-          <circle
-            cx={x(sample.sun_azimuth_deg)}
-            cy={y(sample.sun_elevation_deg)}
-            r="4.5"
-            fill="#f1cb77"
-            stroke="#171e1d"
-            strokeWidth="2"
-          />
-          <circle
-            cx={x(sample.earth_azimuth_deg)}
-            cy={y(sample.earth_elevation_deg)}
-            r="4.5"
-            fill="#94c4df"
-            stroke="#171e1d"
-            strokeWidth="2"
-          />
-        </>
-      )}
-    </svg>
   );
 }
 
@@ -415,7 +302,7 @@ export function SiteAnalysis({
               Local sky · azimuth / elevation
             </span>
           </div>
-          <HorizonChart site={site} sample={sample} />
+          <HorizonPanorama site={site} sample={sample} />
           <div className="timeline-legend">
             <span>
               <i className="sun-dot" />

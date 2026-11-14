@@ -2688,3 +2688,27 @@ h2[id] {
     font-size: 8px;
   }
 }
+
+/* ---- Track B: terrain-aware sky, panorama, sight lines, suitability ---- */
+.terrain-sky .sky-context-caption { max-width: 360px; }
+.sky-status { display: block; font-size: 12.5px; line-height: 1.45; color: #c9d4cf; }
+.sky-status b { margin-right: 4px; }
+.sky-status.sun b { color: var(--sun); }
+.sky-status.earth b { color: var(--earth); }
+.sky-status.is-blocked { color: #9aa5a1; }
+.horizon-panorama { margin: 0; }
+.panorama-countdowns { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 6px; font-size: 13px; }
+.panorama-countdowns .muted { color: var(--muted); font-size: 12px; }
+.terrain-3d-frame { position: relative; }
+.suitability-legend { position: absolute; left: 12px; bottom: 48px; padding: 10px 12px; border-radius: 10px;
+  background: rgba(13, 18, 17, .82); border: 1px solid var(--line); color: #dfe8e3; font-size: 12px; max-width: 300px; }
+.flat-map + .suitability-legend { position: static; margin-top: 8px; }
+.suitability-legend strong { display: block; margin-bottom: 6px; font-size: 12.5px; }
+.suitability-legend div { display: flex; gap: 12px; flex-wrap: wrap; }
+.suitability-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.suitability-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid rgba(255,255,255,.25); }
+.suitability-legend small { display: block; margin-top: 6px; color: var(--muted); }
+.terrain-sun-note { position: absolute; right: 12px; top: 12px; padding: 6px 10px; border-radius: 8px;
+  background: rgba(13, 18, 17, .78); color: #f2dfb3; font-size: 12px; }
+.scene-time { display: grid; gap: 4px; margin: 8px 0 10px; font-size: 13px; }
+.scene-time input { width: 100%; accent-color: var(--sun); }
