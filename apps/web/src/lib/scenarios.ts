@@ -1,12 +1,13 @@
 import { getSiteAnalysis } from "./api";
 import { isMissionRequest } from "./missions";
 import { withinSearchDeadline } from "./deadline";
-import type { Candidate, SearchRequest, SearchResponse, TimeSample } from "./types";
+import type { Candidate, SearchRequest, SearchResponse, TimeSample, VisibilityInterval } from "./types";
 
 // Optional Track A fields, pending the shared contract merge.
 export type LunarEvent = { type: "sunrise" | "sunset" | "earthrise" | "earthset"; time_utc: string; uncertainty_minutes: number };
 export type ScenarioSite = Candidate & {
   events?: LunarEvent[];
+  visibilityIntervals?: { sun: VisibilityInterval[]; earth: VisibilityInterval[] };
   power?: {
     assumptions: { area_m2: number; efficiency: number; mount: string };
     series: { time_utc: string; vertical_w: number; horizontal_w: number }[];
@@ -91,7 +92,7 @@ export async function loadScenario(id: string, request: SearchRequest, signal: A
   }));
   return { key: scenarioKey(id, request), request,
     site: { ...detail.site, rank: 0, score: detail.score, criteria_scores: detail.criteria_scores,
-      metrics: detail.metrics, timeline: detail.timeline, horizon: detail.horizon, events, power: detail.power } };
+      metrics: detail.metrics, timeline: detail.timeline, horizon: detail.horizon, events, visibilityIntervals: detail.intervals, power: detail.power } };
 }
 
 export function batteryMargin(capacityWh: number, loadW: number, darknessHours: number) {

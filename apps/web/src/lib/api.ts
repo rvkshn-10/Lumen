@@ -93,6 +93,20 @@ export type HorizonSample = Pick<
   | "earth_visible"
 >;
 
+interface HorizonBand {
+  labels: number;
+  disagreements: number;
+}
+
+export interface HorizonDisagreement {
+  sample_index: number;
+  body: "sun" | "earth";
+  clearance_deg: number;
+  near_horizon: boolean;
+  model_visible: boolean;
+  physics_visible: boolean;
+}
+
 export interface HorizonReviewResult {
   engine: "OpenVINO";
   device: string;
@@ -104,6 +118,10 @@ export interface HorizonReviewResult {
   disagreement_indices: number[];
   inference_ms?: number;
   near_horizon_samples?: number;
+  near_horizon_deg?: number;
+  near_horizon?: HorizonBand;
+  outside_horizon_band?: HorizonBand;
+  disagreements?: HorizonDisagreement[];
   runtime_version?: string;
 }
 

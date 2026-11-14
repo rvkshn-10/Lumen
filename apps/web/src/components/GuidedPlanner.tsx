@@ -141,7 +141,7 @@ export function GuidedPlanner() {
     } catch (reason) { if (!abort.signal.aborted) setState({ phase: "failed", message: reason instanceof Error ? reason.message : "Inspection unavailable." }); }
     finally { if (!abort.signal.aborted) setInspecting(false); }
   }
-  if (shared.length) return <div className="guided-planner" id="explorer"><SharedScenarioBoard links={shared} demo={shared === demoComparison} onClose={() => {
+  if (shared.length) return <div className="guided-planner" id="explorer"><SharedScenarioBoard links={shared} demo={shared === demoComparison} audience={audience} onClose={() => {
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
     setShared([]);
   }} /></div>;

@@ -30,6 +30,20 @@ class HorizonReview(BaseModel):
     samples: list[HorizonSample] = Field(min_length=1, max_length=2048)
 
 
+class HorizonBand(BaseModel):
+    labels: int
+    disagreements: int
+
+
+class HorizonDisagreement(BaseModel):
+    sample_index: int
+    body: Literal["sun", "earth"]
+    clearance_deg: float
+    near_horizon: bool
+    model_visible: bool
+    physics_visible: bool
+
+
 class HorizonResult(BaseModel):
     engine: Literal["OpenVINO"] = "OpenVINO"
     device: Literal["CPU"] = "CPU"
@@ -41,6 +55,10 @@ class HorizonResult(BaseModel):
     earth_agreement: float
     near_horizon_samples: int
     disagreement_indices: list[int]
+    near_horizon_deg: float = NEAR_HORIZON_DEG
+    near_horizon: HorizonBand
+    outside_horizon_band: HorizonBand
+    disagreements: list[HorizonDisagreement]
     inference_ms: float
 
 
@@ -90,26 +108,46 @@ def review_horizon(samples: list[HorizonSample]) -> HorizonResult:
             ]
             for point in samples
         ],
-        dtype=np.float32,
     )
     reference = np.asarray([[point.sun_visible, point.earth_visible] for point in samples])
-    inputs = np.clip(clearance, -8, 8)
+    inputs = np.clip(clearance, -8, 8).astype(np.float32)
     started = perf_counter()
     try:
         output = compiled.create_infer_request().infer({0: inputs})[0]
     except RuntimeError as exc:
         raise RuntimeUnavailable("OpenVINO could not run the visibility model.") from exc
     elapsed_ms = (perf_counter() - started) * 1_000
-    matched = (output > 0) == reference
+    predicted = output > 0
+    matched = predicted == reference
     paired = matched.all(axis=1)
-    near = np.any(np.abs(clearance + [SOLAR_RADIUS_DEG, 0]) <= NEAR_HORIZON_DEG, axis=1)
+    # Sun clearance uses a fixed radius here, even when the reference used its distance.
+    limb_or_center_clearance = clearance + [SOLAR_RADIUS_DEG, 0]
+    near = np.abs(limb_or_center_clearance) <= NEAR_HORIZON_DEG
+    disagreements = [
+        HorizonDisagreement(
+            sample_index=int(index),
+            body="sun" if body_index == 0 else "earth",
+            clearance_deg=float(limb_or_center_clearance[index, body_index]),
+            near_horizon=bool(near[index, body_index]),
+            model_visible=bool(predicted[index, body_index]),
+            physics_visible=bool(reference[index, body_index]),
+        )
+        for index, body_index in np.argwhere(~matched)
+    ]
     return HorizonResult(
         runtime_version=version,
         samples=len(samples),
         agreement=float(paired.mean()),
         sun_agreement=float(matched[:, 0].mean()),
         earth_agreement=float(matched[:, 1].mean()),
-        near_horizon_samples=int(near.sum()),
+        near_horizon_samples=int(near.any(axis=1).sum()),
         disagreement_indices=np.flatnonzero(~paired).tolist(),
+        near_horizon=HorizonBand(
+            labels=int(near.sum()), disagreements=int((near & ~matched).sum())
+        ),
+        outside_horizon_band=HorizonBand(
+            labels=int((~near).sum()), disagreements=int((~near & ~matched).sum())
+        ),
+        disagreements=disagreements,
         inference_ms=elapsed_ms,
     )
