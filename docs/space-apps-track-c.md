@@ -46,9 +46,9 @@ After installing Playwright and Chrome, building the frontend, and starting the 
 
 ```powershell
 python scripts/v2_integration_smoke.py --url http://127.0.0.1:8000
-python scripts/verify/lumen_verify.py --result data/cache/v2-integration/analysis.json --scene-dump data/cache/v2-integration/scene.json --ui-dump data/cache/v2-integration/ui.json --cache data/cache/track-a/cap-temporal.npz --iterate 2 --report data/cache/v2-integration/verification
+python scripts/verify/lumen_verify.py --result data/cache/v2-integration/analysis.json --scene-dump data/cache/v2-integration/scene.json --ui-dump data/cache/v2-integration/ui.json --cache data/cache/track-a/cap-temporal.npz --iterate 3 --report data/cache/v2-integration/verification
 ```
 
-The browser pass uses live science responses to exercise four-site terrain, ten compare-clock positions, date duplication, mobile controls, and Apollo 12 replay. It exports real analysis, UI and scene inputs plus desktop/mobile screenshots to `data/cache/v2-integration/`. The independent checker passed **111 checks, 0 failures, 0 skips**, including all 16 displayed metrics and 50 scene samples. The merged frontend has **67 passing tests**. GitHub CI also checks the API, frontend and production Docker image.
+The browser pass uses live science responses to exercise four-site terrain, ten compare-clock positions, date duplication, mobile controls, and Apollo 12 replay. It exports real analysis, UI and scene inputs plus desktop/mobile screenshots to `data/cache/v2-integration/`. The independent checker completed all three iterations with **113 checks, 0 failures, 0 skips**, including all 16 displayed metrics and 50 scene samples. The merged frontend has **67 passing tests**; the backend/data suite has **138**, including two regression tests for iteration failure reporting. GitHub CI also checks the API, frontend and production Docker image.
 
 `scripts/track_c_smoke.py` remains available for a board-only display check. Set `VITE_LUMEN_MOCK=1` only for synthetic control demonstrations; release validation uses the live API. The three-person usability rehearsal and demo recording remain manual tasks.

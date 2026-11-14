@@ -39,6 +39,9 @@ Reports go to `data/cache/verify/verify-report.{md,json}`. Exit code 1 on any fa
 1. Run `lumen_verify.py`. Failures are listed first, each with a reproduction (`repro`: result file, site id, window).
 2. Fix the app (or, if the reference is wrong, change `reference_models.py` in a reviewed PR that also updates this file).
 3. Re-run. `--iterate N` keeps re-running the randomised suites with new seeds and 1.5× larger samples until N passes are clean in a row.
+   UI and scene dumps are checked with their source exports on the first pass;
+   subsequent randomised passes do not recheck them against an empty result set.
+   Any failure on any pass is retained in the report and produces a nonzero exit.
 4. The **baseline ratchet** (`scripts/verify/baseline.json`) stores the worst error seen for each check. A run fails if a check exceeds `max(tolerance, 2 × baseline)`, so accuracy can only get better.
 5. `--self-test` plants known bugs (0.01° Sun error, one flipped sample, 5% power error, an event moved one hour, a colour class off by one, …) and fails if any one goes undetected. Run it whenever a check is edited.
 

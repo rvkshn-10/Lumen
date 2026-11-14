@@ -680,7 +680,7 @@ def self_test(args) -> int:
 
 # ------------------------------------------------------------------- driver
 
-def run_once(ctx, results, seed, sample) -> Report:
+def run_once(ctx, results, seed, sample, *, check_parity=True) -> Report:
     rep = Report()
     rng = np.random.default_rng(seed)
     suites = set(ctx.args.suites)
@@ -698,9 +698,9 @@ def run_once(ctx, results, seed, sample) -> Report:
         suite_historic(ctx, rep)
     if "features" in suites:
         suite_curated(ctx, rep)
-    if ctx.args.scene_dump:
+    if check_parity and ctx.args.scene_dump:
         suite_scene_parity(rep, results, ctx.args.scene_dump)
-    if ctx.args.ui_dump:
+    if check_parity and ctx.args.ui_dump:
         suite_ui_parity(rep, results, ctx.args.ui_dump)
     rep.rows = [r for r in rep.rows if r["suite"] in suites | {"parity"}]
     return rep
@@ -770,8 +770,10 @@ def main(argv=None):
     combined = Report()
     seed, sample = args.seed, args.sample
     for it in range(1, 1000):
-        rep = run_once(ctx, results if it == 1 else [], seed, sample)
-        combined.rows += rep.rows if it == 1 else [r for r in rep.rows if r["suite"] in ("cache", "metamorphic")]
+        rep = run_once(ctx, results if it == 1 else [], seed, sample, check_parity=it == 1)
+        combined.rows += rep.rows if it == 1 else [
+            r for r in rep.rows if r["suite"] in ("cache", "metamorphic") or r["status"] == "fail"
+        ]
         if rep.failed():
             print(f"iteration {it}: {len(rep.failed())} failure(s) — stopping with reproduction")
             break
