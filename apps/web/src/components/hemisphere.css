@@ -54,47 +54,238 @@
 }
 @media (prefers-reduced-motion: reduce) { .discovery-card, .discovery-interests button { transition: none; } .discovery-card:hover { transform: none; } }
 
-/* The model leads; planning controls stay beside it, with optional place lookup. */
+/* The Moon is the main surface. Place and mission controls sit on one line above it. */
 .guided-planner .area-layout {
-  grid-template-columns: minmax(0, 1fr) minmax(265px, 305px);
-  grid-template-areas: "scene sidebar";
-  gap: 18px;
+  display: block;
   margin: 0;
+}
+.area-setup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: "editor view next";
   align-items: start;
+  gap: .5rem clamp(.8rem, 2vw, 2rem);
+  width: min(100%, 72rem);
+  margin: 0 auto;
+  padding: .45rem 0;
+  border-block: 1px solid var(--line);
 }
-.guided-planner .area-3d-preview { height: calc(100dvh - 250px); min-height: 610px; border: 0; overflow: visible; border-radius: 16px; }
-.guided-planner .area-view-switch { margin-bottom: 10px; }
-.guided-planner .area-view-switch button { font-size: .88rem; padding: 8px 12px; }
-.guided-planner details.area-editor {
-  display: block;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
-  padding: 0 14px;
+.area-editor { grid-area: editor; min-width: 0; }
+.area-editor > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem .65rem;
+  min-height: 44px;
+  color: var(--text-primary);
+  font-size: .91rem;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
 }
-.area-editor > summary { padding: 14px 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; cursor: pointer; }
+.area-editor > summary::-webkit-details-marker { display: none; }
+.area-editor > summary::before {
+  content: "";
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  height: .38rem;
+  width: .38rem;
+  margin: 0 .18rem .18rem .06rem;
+  transform: rotate(-45deg);
+}
+.area-editor[open] > summary::before { transform: rotate(45deg); }
+.area-editor > summary:hover { text-decoration: underline; text-underline-offset: .23em; }
 .area-editor > summary > span {
-  display: block;
-  margin-top: 5px;
   color: var(--text-secondary);
-  font-size: .9rem;
+  font-size: .8rem;
   font-variant-numeric: tabular-nums;
   font-weight: 400;
+  white-space: nowrap;
 }
-.area-editor-content { display: grid; gap: 12px; padding: 0 0 14px; }
-.area-editor-content .guide-fields { gap: 10px; margin: 0; }
-.area-editor-content .field { gap: 5px; font-size: .9rem; }
-.area-editor-content .field input, .area-editor-content .field select { padding: 8px 10px; min-height: 40px; font-size: .92rem; }
-.area-editor-content .field select { height: auto; line-height: 1.5; }
-.area-editor-content .coverage-outcome { padding: 10px 12px; font-size: .92rem; border-radius: 10px; }
-.area-coverage-details { font-size: .88rem; color: var(--text-secondary); }
-.area-coverage-details summary { cursor: pointer; }
-.area-coverage-details p { margin-top: 6px; line-height: 1.5; }
-.area-sidebar { grid-area: sidebar; min-width: 0; }
-.area-scene { grid-area: scene; }
-.area-sidebar-actions { display: grid; gap: 10px; margin-top: 10px; }
-.area-sidebar-actions .primary-button { width: 100%; min-height: 44px; border-radius: 999px; justify-content: center; }
-.area-sidebar-actions .guide-error { margin: 0; padding: 10px 12px; font-size: .92rem; }
+.area-editor-content {
+  display: grid;
+  gap: .8rem;
+  max-width: 32rem;
+  padding: .75rem 0 1rem;
+}
+.area-editor-content .guide-fields { gap: .7rem; margin: 0; }
+.area-editor-content .field { gap: .3rem; font-size: .88rem; }
+.area-editor-content .field :is(input, select) {
+  min-height: 44px;
+  padding: .5rem .62rem;
+  font-size: .94rem;
+}
+.area-coverage-details { font-size: .85rem; color: var(--text-secondary); }
+.area-coverage-details summary { padding: .55rem 0; cursor: pointer; }
+.area-coverage-details p { margin: .35rem 0; line-height: 1.55; }
+.guided-planner .area-setup .area-view-switch {
+  display: flex;
+  grid-area: view;
+  align-items: start;
+  justify-content: center;
+  gap: 1rem;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.guided-planner .area-setup .area-view-switch button,
+.guided-planner .area-setup .area-view-switch button[aria-pressed="true"] {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  min-height: 44px;
+  color: var(--text-secondary);
+  font-size: .85rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.guided-planner .area-setup .area-view-switch button[aria-pressed="true"] {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: .29em;
+}
+.guided-planner .area-setup .area-view-switch button:hover { color: var(--text-primary); }
+.area-next {
+  display: flex;
+  grid-area: next;
+  align-items: center;
+  justify-content: end;
+  flex-wrap: wrap;
+  gap: .4rem .85rem;
+  min-height: 44px;
+}
+.area-coverage-status {
+  flex: 1 0 7rem;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: .82rem;
+  line-height: 1.35;
+  text-align: right;
+}
+.area-sidebar-actions { display: grid; gap: .5rem; }
+.area-sidebar-actions .primary-button { min-height: 44px; padding-inline: 1rem; justify-content: center; }
+.area-sidebar-actions .primary-button[hidden] { display: none; }
+.area-sidebar-actions .guide-error { margin: 0; padding: .65rem .75rem; font-size: .85rem; }
+.area-sidebar-actions .coverage-ack { padding: .6rem .75rem; font-size: .85rem; }
+.area-next:has(.coverage-ack, .guide-error) .area-coverage-status { flex-basis: 100%; }
+.area-feedback {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .25rem .8rem;
+}
+.area-feedback p { margin: 0; color: var(--text-secondary); font-size: .85rem; }
+.area-feedback :is(button, a) { min-height: 44px; display: inline-flex; align-items: center; }
+.area-scene { min-width: 0; }
+.guided-planner .area-3d-preview {
+  height: clamp(34rem, calc(100svh - 16rem), 46rem);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+.area-scene .area-3d-preview > [role="status"] { padding: 2rem 1rem; text-align: center; }
+.area-scene .orbital-scene:not(.immersive):not(:fullscreen) {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: #070c10;
+}
+.area-scene .orbital-scene:not(.immersive):not(:fullscreen) :is(.orbital-toolbar, .orbital-timeline) {
+  border: 0;
+  border-radius: 0;
+  background: #0b0b0b;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.area-scene .orbital-scene:not(.immersive):not(:fullscreen) .orbital-toolbar {
+  width: min(100%, 72rem);
+  align-self: center;
+  padding: .23rem 0;
+  gap: 0 0.85rem;
+}
+.area-scene .orbital-scene:not(.immersive):not(:fullscreen) .orbital-toolbar button {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  min-height: 44px;
+  padding: 0 .55rem;
+}
+.area-scene .orbital-scene:not(.immersive):not(:fullscreen) .orbital-toolbar button[aria-pressed="true"],
+.area-scene .orbital-scene:not(.immersive):not(:fullscreen) .orbital-toolbar button:hover:enabled {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: .28em;
+}
+.area-scene .orbital-scene:not(.immersive):not(:fullscreen) .orbital-timeline {
+  width: min(100%, 72rem);
+  align-self: center;
+  padding: .6rem 0;
+}
+.area-scene .orbital-scene:not(.immersive):not(:fullscreen) .orbital-footer {
+  width: min(100%, 72rem);
+  align-self: center;
+  padding-inline: 0;
+  background: #0b0b0b;
+}
+
+@media (max-width: 960px) {
+  .area-setup {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "editor next" "view view";
+    row-gap: 0;
+  }
+  .area-coverage-status { flex: 0 1 auto; }
+}
+@media (max-width: 650px) {
+  .guided-planner .area-3d-preview { height: auto; }
+  .area-scene .orbital-scene:not(.immersive):not(:fullscreen):not(.site-view) .orbital-canvas {
+    height: clamp(19rem, 52svh, 29rem);
+    min-height: 0;
+    flex: 0 0 auto;
+  }
+  .area-scene .orbital-scene:not(.immersive):not(:fullscreen) .orbital-toolbar { justify-content: center; }
+  .area-scene .orbital-scene:not(.immersive):not(:fullscreen) .orbital-toolbar :is(.scene-view-tabs, .scene-tools) {
+    width: auto;
+    justify-content: center;
+  }
+  .area-scene .orbital-scene:not(.immersive):not(:fullscreen) .scene-view-tabs button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .area-scene .orbital-scene:not(.immersive):not(:fullscreen) .orbital-timeline,
+  .area-scene .orbital-scene:not(.immersive):not(:fullscreen) .orbital-footer { padding-inline: .5rem; }
+}
+@media (max-width: 480px) {
+  .area-setup {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "editor next" "view view";
+    column-gap: .55rem;
+    row-gap: .18rem;
+  }
+  .area-setup:has(.area-editor[open], .coverage-ack, .guide-error) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "editor" "next" "view";
+  }
+  .area-editor > summary { display: block; position: relative; padding: .25rem 0 .25rem 1rem; }
+  .area-editor > summary::before { position: absolute; left: 0; top: .65rem; }
+  .area-editor > summary > span { display: block; white-space: normal; font-size: .76rem; }
+  .area-next { display: grid; justify-items: end; gap: .2rem; }
+  .area-coverage-status { grid-row: 2; text-align: right; font-size: .72rem; }
+  .area-sidebar-actions { grid-row: 1; }
+  .area-scene .orbital-scene:not(.immersive):not(:fullscreen) .orbital-toolbar button { padding-inline: .3rem; }
+}
+
 .place-tools { position: relative; }.place-tool-buttons { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
 .place-tool-buttons > button { padding: 8px 10px; min-height: 38px; font-size: .9rem; }
 .place-tools .saved-areas { padding: 0; font-size: 11px; }.place-tools .saved-areas > div { position: absolute; z-index: 80; right: 0; background: var(--surface-raised); border: 1px solid var(--line); padding: 10px; border-radius: 8px; min-width: 260px; }
@@ -103,16 +294,7 @@
 .place-finder .landmark-matches small { margin: 4px 0 0; display: block; }
 .save-notice { display: block; margin-top: 8px; font-size: 10px; color: var(--text-secondary); }
 .guided-planner .guide-actions { margin-top: 18px; }
-@media (max-width: 850px) {
-  .guided-planner .area-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "sidebar" "scene"; }
-  .guided-planner .area-3d-preview { height: 650px; min-height: 0; }
-}
-@media (max-width: 650px) {
-  .area-sidebar-actions .primary-button { min-height: 46px; }
-  .area-editor-content .field input, .area-editor-content .field select { min-height: 44px; }
-}
-
-.local-area-workspace { margin-top: 22px; }
+.local-area-workspace { margin-top: 22px; scroll-margin-top: 4rem; }
 .local-area-workspace > .coarse-area-preview { padding: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .local-area-workspace .coarse-area-preview > .guide-fields { grid-template-columns: repeat(2, minmax(0, 240px)); }
 .local-area-workspace .coarse-area-preview > label { max-width: 490px; }

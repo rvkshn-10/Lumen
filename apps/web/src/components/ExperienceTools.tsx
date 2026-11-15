@@ -20,8 +20,8 @@ export function ExperienceTools({ audience, onAudience, candidateCount }: {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
   return <>
-    <button type="button" className="secondary-button planner-help-trigger" onClick={() => { setStep(0); setOpen(true); }}>
-      <Icon name="info" size={16} /> Help &amp; settings
+    <button type="button" className="planner-help-trigger" aria-label="Help & settings" onClick={() => { setStep(0); setOpen(true); }}>
+      <Icon name="info" size={17} /><span>Help</span>
     </button>
     {open && <PlanningDialog title="Help & settings" onClose={() => setOpen(false)}>
       <div className="planner-help">
@@ -106,7 +106,7 @@ export function CuratedPicker({ features, onPick }: { features: LunarFeature[]; 
   }
 
   return <div className="curated-picker">
-    <button className="secondary-button" onClick={() => setOpen(true)}>Browse lunar places</button>
+    <button className="text-button" onClick={() => setOpen(true)}>Browse lunar places <Icon name="arrow" size={15} /></button>
     {open && <PlanningDialog title={historic?.name ?? "Browse lunar places"} onClose={() => { setHistoric(null); setOpen(false); }}>
       {historic ? <>
         <button ref={replayBack} className="secondary-button" onClick={() => {

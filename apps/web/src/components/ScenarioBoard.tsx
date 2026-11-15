@@ -160,21 +160,34 @@ const boardViews = ["Overview", "Timeline", "Analysis"] as const;
 type BoardView = typeof boardViews[number];
 const overviewMetrics = [metrics[1], metrics[0], metrics[2], metrics[3]];
 
-function ComparisonValues({ rows }: { rows: Scenario[] }) {
-  const commonStart = rows.every(row => row.request.time_range.start_utc === rows[0].request.time_range.start_utc);
-  const commonEnd = rows.every(row => row.request.time_range.end_utc === rows[0].request.time_range.end_utc);
+function ComparisonValues({ rows, options, onReplace }: {
+  rows: Scenario[]; options: Scenario[]; onReplace: (previous: string, next: string) => void;
+}) {
+  const timeRange = rows[0].request.time_range;
+  const commonWindow = rows.every(({ request }) =>
+    request.time_range.start_utc === timeRange.start_utc && request.time_range.end_utc === timeRange.end_utc);
+  const adjustable = options.length > rows.length;
+  const byContact = [...rows].sort((a, b) => b.site.metrics.longest_communication_hours - a.site.metrics.longest_communication_hours);
+  const continuousDifference = commonWindow && byContact.length === 2
+    ? byContact[0].site.metrics.longest_communication_hours - byContact[1].site.metrics.longest_communication_hours : 0;
   return <section className="scenario-comparison" aria-label="Compare selected scenarios">
-    <header className="compare-section-heading">
-      <h3>Site comparison</h3>
-      {commonStart && commonEnd && <p>{utcRange(rows[0].request.time_range)}</p>}
-    </header>
+    {commonWindow && <p className="compare-window">{utcRange(timeRange)}</p>}
     <div className="compare-values-scroll" role="region" aria-label="Comparison values" tabIndex={rows.length > 2 ? 0 : undefined}>
       <table className="comparison-table compare-values" data-sites={rows.length}>
         <thead><tr>
-          <th scope="col">Metric</th>
-          {rows.map(row => <th scope="col" key={row.key}>
-            {label(row)}
-            {(!commonStart || !commonEnd) && <small>{utcRange(row.request.time_range)}</small>}
+          <th scope="col"><span className="sr-only">Metric</span></th>
+          {rows.map((row, index) => <th scope="col" key={index}>
+            {adjustable ? <>
+              <select className="compare-site-picker" aria-label={`Site in column ${index + 1}`} value={row.key}
+                onChange={event => onReplace(row.key, event.target.value)}>
+                {options.map(option => <option key={option.key} value={option.key}
+                  disabled={option.key !== row.key && rows.some(selected => selected.key === option.key)}>
+                  {label(option)}{options.filter(other => label(other) === label(option)).length > 1 ? ` · ${utcRange(option.request.time_range)}` : ""}
+                </option>)}
+              </select>
+              <span className="compare-site-print">{label(row)}</span>
+            </> : label(row)}
+            {!commonWindow && <small>{utcRange(row.request.time_range)}</small>}
           </th>)}
         </tr></thead>
         <tbody>{overviewMetrics.map(metric => {
@@ -186,17 +199,13 @@ function ComparisonValues({ rows }: { rows: Scenario[] }) {
             {rows.map(row => {
               const number = value(row, metric.key);
               const leads = number != null && differs && metric.format(number) === metric.format(best);
-              return <td key={row.key} className={leads ? "compare-leading" : undefined}>
-                <Metric row={row} metric={metric} />
-                {number != null && metric.key.endsWith("_fraction") && <span className="compare-measure" aria-hidden="true">
-                  <span style={{ width: `${number * 100}%` }} />
-                </span>}
-              </td>;
+              return <td key={row.key} className={leads ? "compare-leading" : undefined}><Metric row={row} metric={metric} /></td>;
             })}
           </tr>;
         })}</tbody>
       </table>
     </div>
+    {continuousDifference >= 0.05 && <p className="compare-finding">{label(byContact[0])} has <strong>{hours(continuousDifference)} more</strong> uninterrupted Earth visibility than {label(byContact[1])}.</p>}
   </section>;
 }
 
@@ -334,7 +343,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
   }}>
     <h2 id="scenario-board-title" className="sr-only">Scenario board</h2>
     <div className="compare-toolbar">
-      <div className="compare-tabs glass-surface" role="tablist" aria-label="Comparison views">
+      <div className="compare-tabs" role="tablist" aria-label="Comparison views">
         {boardViews.map((name, index) => <button key={name} type="button" role="tab"
           id={ids(name).tab} aria-controls={ids(name).panel} aria-selected={view === name} tabIndex={view === name ? 0 : -1}
           disabled={!rows.length && name !== "Overview"} ref={node => { tabs.current[index] = node; }}
@@ -353,7 +362,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
           onClick={() => show(name)}>{name}</button>)}
       </div>
       {rows.length > 0 && <details ref={shareMenu} className="compare-actions">
-        <summary className="glass-surface" aria-label="Share and export"><Icon name="download" size={16} /><span className="compare-action-label">Share &amp; export</span></summary>
+        <summary aria-label="Share and export"><Icon name="download" size={16} /><span className="compare-action-label">Share</span></summary>
         <div className="compare-menu">
           <button onClick={() => { closeActions(); setSharing(true); }}>Share link</button>
           <button onClick={() => { closeActions(); exportCsv(); }}>Export CSV</button>
@@ -368,10 +377,14 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     </div>}
 
     <div className="scenario-overview" role="tabpanel" id={ids("Overview").panel} aria-labelledby={ids("Overview").tab} hidden={view !== "Overview"}>
-      {picked.length > 0 && <ComparisonValues rows={picked} />}
+      {picked.length > 0 && <ComparisonValues rows={picked} options={rows}
+        onReplace={(previous, next) => setSelected(current =>
+          current.includes(next) ? current : current.map(key => key === previous ? next : key))} />}
       {picked.length < 2 && rows.length > 1 && <p className="compare-selection-hint">Select two or more scenarios to compare them.</p>}
       {!rows.length && !available.length && !alternatives.length && <p>No scenarios to compare.</p>}
-      {(rows.length > 0 || available.length > 0) && <section className="compare-scenarios" aria-label="Scenarios">
+      {(rows.length > 0 || available.length > 0) && <details className="compare-management">
+        <summary>Edit scenarios</summary>
+        <section className="compare-scenarios" aria-label="Scenarios">
         <header className="compare-section-heading">
           <div><h3>Scenarios</h3><p aria-live="polite">{picked.length} selected · Compare up to {COMPARE_LIMIT}</p></div>
           {rows.length > 2 && <label className="field compare-sort">Sort by<select value={sort} onChange={event => setSort(event.target.value as typeof sort)}>
@@ -438,7 +451,8 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
           <button className="primary-button" disabled={!canAdd}>Analyze the new date</button>
           <button type="button" className="text-button" onClick={() => setEditing(null)}>Cancel</button>
         </form>}
-      </section>}
+        </section>
+      </details>}
     </div>
 
     <div className="compare-timeline-panel" role="tabpanel" id={ids("Timeline").panel} aria-labelledby={ids("Timeline").tab} hidden={view !== "Timeline"}>

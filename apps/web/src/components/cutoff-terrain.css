@@ -29,12 +29,12 @@
   height: 72px;
   margin-top: 8px;
 }
-.cutoff-blocked-region { fill: #353535; }
-.cutoff-horizon-line { stroke: #999; stroke-width: 1; }
-.cutoff-visible-line { stroke: #f5f5f5; stroke-width: 2; }
-.cutoff-obscured-line { stroke: #cacaca; stroke-width: 2; stroke-dasharray: 5 4; }
-.cutoff-observer, .cutoff-visible-body { fill: #f5f5f5; }
-.cutoff-obscured-body { fill: #353535; stroke: #cacaca; stroke-width: 1.5; }
+.cutoff-blocked-region { fill: var(--line); }
+.cutoff-horizon-line { stroke: var(--text-secondary); stroke-width: 1; }
+.cutoff-visible-line { stroke: var(--text-primary); stroke-width: 2; }
+.cutoff-obscured-line { stroke: var(--text-primary); stroke-width: 2; stroke-dasharray: 5 4; }
+.cutoff-observer, .cutoff-visible-body { fill: var(--text-primary); }
+.cutoff-obscured-body { fill: var(--line); stroke: var(--text-primary); stroke-width: 1.5; }
 
 @media print {
   .cutoff-terrain time, .cutoff-terrain-reading dt { color: #333; }

@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { Audience, Scenario, ScenarioLink } from "../lib/scenarios";
 import { loadScenario } from "../lib/scenarios";
 import { ScenarioBoard } from "./ScenarioBoard";
-import { Icon } from "./Icon";
 import type { TerrainData } from "../lib/types";
 
-export function SharedScenarioBoard({ links, onClose, demo = false, audience = "Public", terrain }: { links: ScenarioLink[]; onClose: () => void; demo?: boolean; audience?: Audience; terrain?: TerrainData | null }) {
+export function SharedScenarioBoard({ links, demo = false, audience = "Public", terrain }: { links: ScenarioLink[]; demo?: boolean; audience?: Audience; terrain?: TerrainData | null }) {
   const [outcome, setOutcome] = useState<{ rows: Scenario[]; failures: number }>();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, []);
@@ -26,15 +25,9 @@ export function SharedScenarioBoard({ links, onClose, demo = false, audience = "
     void restore();
     return () => controller.abort();
   }, [links]);
-  const [first, second] = outcome?.rows ?? [];
-  const extraEarthHours = first && second &&
-    first.site.metrics.longest_communication_hours - second.site.metrics.longest_communication_hours;
   return <section className="guide-stage compare-page">
     <header className="compare-page-header">
-      <button className="compare-back glass-surface" onClick={onClose}><Icon name="arrow" size={16} />Back to planner</button>
-      <h1 tabIndex={-1} ref={heading}>{demo ? "Compare lunar sites" : "Shared comparison"}</h1>
-      {demo && typeof extraEarthHours === "number" && extraEarthHours > 0 &&
-        <p className="compare-demo-result">Site A has <strong>{extraEarthHours.toFixed(1)} more continuous hours</strong> with Earth in view than Site B.</p>}
+      <h1 tabIndex={-1} ref={heading}>Compare lunar sites</h1>
     </header>
     {!outcome ? <p role="status">Loading site analyses…</p> : <>
       {outcome.failures > 0 && <p role="status">{outcome.failures} shared scenarios could not be analyzed.</p>}

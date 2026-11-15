@@ -17,17 +17,15 @@
 }
 
 #top {
-  background: radial-gradient(ellipse 56rem 20rem at 50% -4rem, #202020, transparent),
-    var(--app-background);
+  background: #000;
   display: flow-root;
   min-height: 100dvh;
 }
 
+#top:has(.explorer-mission, .explorer-comparison) { background: #fff; }
+
 .glass-surface,
 .glass-button,
-#top .topbar,
-.guided-planner .guide-steps,
-.guided-planner .area-view-switch,
 .guided-planner :is(.orbital-toolbar, .orbital-timeline),
 .planning-dialog,
 .methods-dialog {
@@ -43,58 +41,36 @@
   border-radius: var(--glass-radius, 999px);
 }
 
-#top .topbar {
+.planner-masthead {
   position: sticky;
-  top: 10px;
+  top: 0;
   z-index: 8;
-  margin: 10px auto 0;
-  width: min(calc(100% - 24px), 1440px);
-  min-height: 53px;
-  height: auto;
-  padding: 8px clamp(14px, 2vw, 24px);
-  border-radius: 19px;
+  background: #fafafa;
+  border-bottom: 1px solid #e8e8ed;
 }
 
-#top .brand-caption { color: var(--text-secondary); }
-
-.guided-planner .area-view-switch {
-  width: fit-content;
-  max-width: 100%;
-  padding: 3px;
-  gap: 3px;
-  border-radius: 1.3rem;
-  --glass-shadow: 0 4px 12px #0004;
-}
-
-.guided-planner .area-view-switch > button {
-  min-height: 40px;
-  padding-inline: 13px;
-  border: 1px solid transparent;
-  border-radius: 1.05rem;
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.guided-planner .area-view-switch > button[aria-pressed="true"] {
-  background: linear-gradient(#f6f6f6, #d6d6d6);
-  border-color: #fff9;
-  color: #131313;
-  box-shadow: inset 0 1px #fffa, 0 2px 5px #0005;
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .planner-masthead {
+    background: rgb(250 250 250 / 90%);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+  }
 }
 
 .guided-planner :is(.orbital-toolbar, .orbital-timeline) {
   --glass-shadow: 0 5px 16px #0004;
 }
 
-.glass-button:hover:not(:disabled),
-.guided-planner .area-view-switch > button:hover:not([aria-pressed="true"]):not(:disabled) {
+.glass-button:hover:not(:disabled) {
   background-color: #ffffff20;
   color: var(--text-primary);
 }
 
 .planning-dialog,
 .methods-dialog {
-  --glass-fill: #202020;
+  --glass-fill: var(--surface-raised);
+  --glass-edge: var(--line-strong);
+  --glass-light: none;
   --glass-blur: 30px;
   --glass-shadow: 0 24px 72px #000a;
   border-radius: 22px;
@@ -102,7 +78,7 @@
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .planning-dialog,
-  .methods-dialog { --glass-fill: rgb(25 25 25 / 88%); }
+  .methods-dialog { --glass-fill: color-mix(in srgb, var(--surface-raised) 94%, transparent); }
 }
 
 .planning-dialog::backdrop,
@@ -113,11 +89,11 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  :is(.primary-button, .secondary-button, .glass-button, .guide-steps button) {
+  :is(.primary-button, .secondary-button, .glass-button) {
     transition: scale 140ms ease, background-color 150ms ease, border-color 150ms ease;
   }
 
-  :is(.primary-button, .secondary-button, .glass-button, .guide-steps button):active:not(:disabled) {
+  :is(.primary-button, .secondary-button, .glass-button):active:not(:disabled) {
     scale: .97;
     transition-duration: 75ms;
   }
@@ -135,11 +111,18 @@
 }
 
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .planner-masthead {
+    background: #fff;
+    border-color: #d2d2d7;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
   :root,
   .planning-dialog,
   .methods-dialog {
-    --glass-fill: #222;
-    --glass-edge: #888;
+    --glass-fill: var(--surface-raised);
+    --glass-edge: var(--line-strong);
     --glass-backdrop: none;
     --glass-light: none;
   }

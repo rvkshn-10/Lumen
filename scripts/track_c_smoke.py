@@ -27,6 +27,7 @@ def check(page, url: str) -> list[dict]:
     expect(board).to_be_visible()
     sites = {site["id"]: site for site in result["candidates"]}
     assert len(sites) >= 2, "The demo window needs two eligible locations"
+    board.locator(".compare-management > summary").click()
     scenario_rows = board.get_by_role("region", name="Scenarios", exact=True)
     for checkbox in scenario_rows.get_by_role("checkbox").all():
         checkbox.check()

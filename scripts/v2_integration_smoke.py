@@ -34,6 +34,7 @@ def main():
         page.route("**/api/v1/candidates/search", capture_search)
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(options.url + "/?parity")
+        page.locator(".area-editor > summary").click()
         page.get_by_role("combobox", name="Area selection", exact=True).select_option("full_supported_region")
         page.get_by_role("button", name="Continue to mission").click()
         page.get_by_role("button", name="Apply October 2028 demo window").click()
@@ -45,11 +46,26 @@ def main():
         (options.output / "analysis.json").write_text(json.dumps(result), encoding="utf-8")
         board = page.get_by_role("region", name="Scenario board", exact=True)
         expect(board).to_be_visible()
+        comparison = board.get_by_role("region", name="Comparison values", exact=True)
+        picker = comparison.get_by_role("combobox", name="Site in column 1", exact=True)
+        original = picker.input_value()
+        first, replacement = result["candidates"][0], result["candidates"][2]
+        first_metric = comparison.locator(f'[data-metric="{first["id"]}:earth_visibility_fraction"]')
+        replacement_metric = comparison.locator(f'[data-metric="{replacement["id"]}:earth_visibility_fraction"]')
+        picker.select_option(label=f'Candidate {replacement["rank"]}')
+        expect(first_metric).to_have_count(0)
+        expect(replacement_metric).to_be_visible()
+        assert float(replacement_metric.get_attribute("data-raw")) == replacement["metrics"]["earth_visibility_fraction"]
+        picker.select_option(value=original)
+        expect(first_metric).to_be_visible()
+        expect(replacement_metric).to_have_count(0)
+
+        scenario_editor = board.locator(".compare-management > summary")
+        scenario_editor.click()
         scenarios = board.get_by_role("region", name="Scenarios", exact=True)
         boxes = scenarios.get_by_role("checkbox")
         for index in range(4):
             boxes.nth(index).check()
-        comparison = board.get_by_role("region", name="Comparison values", exact=True)
         expect(comparison).to_be_visible()
         values = comparison.locator("[data-metric]").evaluate_all("""elements => elements.map(el => {
             const key = el.dataset.metric.split(':').at(-1);
@@ -81,6 +97,8 @@ def main():
         (options.output / "scene.json").write_text(json.dumps({"samples": samples}), encoding="utf-8")
         # Date duplication must obtain new live science, not duplicate a response.
         board.get_by_role("tab", name="Overview", exact=True).click()
+        if not scenarios.is_visible():
+            scenario_editor.click()
         board.locator(".compare-row-menu > summary").first.click()
         board.get_by_role("button", name="Duplicate & change date", exact=True).click()
         board.get_by_label(re.compile("^New start date for ")).fill("2028-10-02T00:00")
@@ -108,7 +126,7 @@ def main():
         expect(page.locator('[data-metric="apollo-12:sun_elevation_deg"]')).to_have_text("5.1°", timeout=135000)
         assert not errors, errors
         browser.close()
-    print(f"Verified four-site terrain, 10 scene times, {len(values)} UI values, date duplication, mobile and historic replay.")
+    print(f"Verified site switching, four-site terrain, 10 clock times, {len(values)} UI values, date duplication, mobile and replay.")
 
 
 if __name__ == "__main__":

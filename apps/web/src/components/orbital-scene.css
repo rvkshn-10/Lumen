@@ -1,4 +1,16 @@
 .orbital-scene { position: relative; width: 100%; height: 100%; min-height: 590px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 20px; background: #090909; overflow: hidden; color: var(--text-primary); isolation: isolate; }
+.explorer-comparison .orbital-scene {
+  color-scheme: dark;
+  --surface: #101010;
+  --surface-raised: #1b1b1b;
+  --text-primary: #f5f5f5;
+  --text-secondary: #b5b5b5;
+  --line: #303030;
+  --glass-fill: rgb(35 35 37 / 82%);
+  --glass-edge: #ffffff30;
+  --glass-rim: inset 0 1px #ffffff31;
+  --glass-light: linear-gradient(166deg, #ffffff10, transparent 65%);
+}
 .orbital-scene.immersive, .orbital-scene:fullscreen { position: fixed; inset: 0; z-index: 10000; width: 100vw; height: 100dvh; max-height: none; min-height: 0; border: 0; border-radius: 0; }
 .orbital-toolbar { z-index: 70; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 14px; }
 .orbital-scene button {
@@ -82,6 +94,12 @@
   .orbital-scene button:active:enabled { transform: none; }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .explorer-comparison .orbital-scene {
+    --glass-fill: #222;
+    --glass-edge: #888;
+    --glass-light: none;
+    --glass-backdrop: none;
+  }
   .orbital-scene .scene-navigation > button:not([aria-pressed="true"]), .scene-readout {
     background: var(--surface-raised);
     -webkit-backdrop-filter: none;
@@ -89,6 +107,10 @@
   }
 }
 @media (prefers-contrast: more) {
+  .explorer-comparison .orbital-scene {
+    --text-secondary: #dedede;
+    --line: #8c8c8c;
+  }
   .orbital-scene button:enabled, .orbital-scene select:enabled,
   .orbital-scene input[type="datetime-local"], .scene-readout {
     border-color: #a0a0a0;

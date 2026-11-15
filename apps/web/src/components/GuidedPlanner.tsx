@@ -27,7 +27,6 @@ function initialRequest(): SearchRequest {
     time_range: { start_utc: "2028-10-01T00:00:00Z", end_utc: "2028-10-08T00:00:00Z" } };
 }
 const phases = { timeout: "Search time limit reached", submitting: "Submitting mission", queued: "Waiting in the queue", running: "Analysis running", complete: "Analysis complete", canceled: "Analysis canceled", failed: "Analysis failed", expired: "Analysis expired", queue_full: "The queue is full", waking: "Service waking up", outside: "Outside prepared coverage" };
-const stages = ["Area", "Mission", "Compare"];
 export function GuidedPlanner() {
   const [shared, setShared] = useState(() => sharedScenarios(window.location.hash));
   const [step, setStep] = useState(1);
@@ -91,15 +90,21 @@ export function GuidedPlanner() {
   const stale = !!result && canonical(draft) !== canonical(result.request);
   const areaReady = !!catalog && !coveragePending && coverage && coverage.status !== "outside" && (coverage.status !== "partial" || acknowledged);
   const radiusExceedsLimit = !!catalog && draft.region.selector_type !== "full_supported_region" && (draft.region.search_radius_km ?? 0) > catalog.public_limits.maximum_radius_km;
+  const canShowDemo = import.meta.env.VITE_LUMEN_MOCK !== "1" && catalog?.geometry.type === "cap";
+  const currentStep = shared.length ? 3 : step;
   const site = result?.candidates.find(item => item.id === selected) ?? extraSite;
   const requiredLimits = review ? appliedConstraints(draft) : [];
   function update(request: SearchRequest) {
     if (busy) { version.current++; requestController.current?.abort(); setBusy(false); setState({ phase: "canceled", message: "The request was canceled because its inputs changed. Your previous applied results are retained." }); }
     setDraft(structuredClone(request)); setReview(false); setValidation([]);
   }
-  function go(next: number) { setStep(next); setReview(false); setValidation([]); }
+  function go(next: number) {
+    setStep(next); setReview(false); setValidation([]);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
   function continueToMission() {
     if (!coverage || !areaReady || radiusExceedsLimit) return;
+    if (shared.length) closeShared();
     setDraft(current => ({ ...current, region: coverage.region }));
     go(2);
   }
@@ -153,40 +158,46 @@ export function GuidedPlanner() {
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
     setShared([]);
   }
+  function openArea() {
+    if (shared.length) closeShared();
+    go(1);
+  }
+  function openDemo() {
+    setShared(demoComparison);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+  function openCompare() {
+    if (!shared.length && (result || busy || state)) go(3);
+    else if (!shared.length && canShowDemo) openDemo();
+  }
   return <>
-    <header className="topbar">
-      <a className="brand" href="#top" aria-label="Lumen home" onClick={event => {
-        event.preventDefault();
-        if (shared.length) closeShared();
-        go(1);
-        window.scrollTo({ top: 0, behavior: "instant" });
-      }}>
-        <img src="/lumen-mark.svg" alt="" /><span>Lumen</span>
-      </a>
-      <ExperienceTools audience={audience} onAudience={setAudience} candidateCount={catalog?.candidate_count} />
+    <header className="planner-masthead">
+      <div className="planner-masthead-inner">
+        <a className="brand" href="#top" aria-label="Lumen home" onClick={event => { event.preventDefault(); openArea(); }}>
+          <img src="/lumen-mark.svg" alt="" /><span>Lumen</span>
+        </a>
+        <nav className="guide-steps" aria-label="Planning stages">
+          <button type="button" aria-current={currentStep === 1 ? "step" : undefined} onClick={openArea}>Area</button>
+          <button type="button" aria-current={currentStep === 2 ? "step" : undefined}
+            disabled={!areaReady || radiusExceedsLimit} onClick={continueToMission}>Mission</button>
+          <button type="button" aria-current={currentStep === 3 ? "step" : undefined}
+            disabled={currentStep !== 3 && !result && !busy && !state && !canShowDemo} onClick={openCompare}>Compare</button>
+        </nav>
+        <ExperienceTools audience={audience} onAudience={setAudience} candidateCount={catalog?.candidate_count} />
+      </div>
     </header>
-    <div className="guided-planner" id="explorer">
-      {shared.length ? <SharedScenarioBoard links={shared} demo={shared === demoComparison} audience={audience} terrain={terrain} onClose={closeShared} /> : <>
-    <nav className="guide-steps" aria-label="Planning stages">
-      {stages.map((label, index) => (
-        <button key={label} type="button" aria-current={step === index + 1 ? "step" : undefined}
-          disabled={index === 1 ? !areaReady || radiusExceedsLimit : index === 2 && !result && !busy && !state}
-          onClick={index === 1 ? continueToMission : () => go(index + 1)}>
-          {label}
-        </button>
-      ))}
-    </nav>
+    <div className={`guided-planner explorer-${currentStep === 1 ? "area" : currentStep === 2 ? "mission" : "comparison"}`} id="explorer">
+      {shared.length ? <SharedScenarioBoard links={shared} demo={shared === demoComparison} audience={audience} terrain={terrain} /> : <>
     {import.meta.env.VITE_LUMEN_MOCK === "1" && <p className="changed-notice" role="status">Mock mode · synthetic analysis and replay data</p>}
     {result && stale && <div className="changed-notice" role="status">These results and exports use the previous mission. Review and run your edits to update them.</div>}
     {loadError && <div className="guide-error" role="alert"><h2>Service waking up or coverage unavailable</h2><p>{loadError}</p><p>Your inputs are retained.</p><button className="secondary-button" onClick={() => setRefresh(value => value + 1)}>Retry loading coverage</button></div>}
     {!catalog && !loadError && <p role="status">Loading the verified coverage catalog…</p>}
-    {catalog && step === 1 && <section className="guide-stage">
-      <header className="guide-stage-heading">
+    {catalog && step === 1 && <section className="guide-stage guide-area-stage">
+      <header className="guide-stage-heading guide-display-heading">
         <h1 tabIndex={-1} ref={heading}>Choose an area</h1>
         <div className="guide-stage-tools">
           <CuratedPicker features={features} onPick={place => update({ ...draft, region: { selector_type: "circle", center: { latitude_deg: place.latitude_deg, longitude_deg_east: place.longitude_deg_east }, search_radius_km: 3 } })} />
-          {import.meta.env.VITE_LUMEN_MOCK !== "1" && catalog.geometry.type === "cap" &&
-            <button className="secondary-button" onClick={() => { setShared(demoComparison); window.scrollTo({ top: 0, behavior: "instant" }); }}>Open the demo comparison</button>}
+          {canShowDemo && <button className="text-button" onClick={openDemo}>Open the demo comparison <Icon name="arrow" size={15} /></button>}
         </div>
       </header>
       <VerifiedArea terrain={terrain} catalog={catalog} request={draft} features={features} outcome={coverage} pending={coveragePending} error={coverageError} onChange={update} onRetry={() => setCoverageRefresh(value => value + 1)} actions={<>
@@ -196,9 +207,8 @@ export function GuidedPlanner() {
       </>} />
     </section>}
     {catalog && step === 2 && <section className="guide-stage guide-mission-stage">
-      <header className="guide-stage-heading">
+      <header className="guide-stage-heading guide-display-heading">
         <h1 tabIndex={-1} ref={heading}>{review ? "Review mission" : "Set the mission"}</h1>
-        {!review && <button className="secondary-button" onClick={() => setLibrary(true)}>Saved missions</button>}
       </header>
       {review ? <>
         <dl className="review-facts">
@@ -207,30 +217,32 @@ export function GuidedPlanner() {
           <div><dt>Priority</dt><dd>{priorityName(draft)}</dd></div>
           <div><dt>Detailed coverage</dt><dd>{catalog.label} · {coverage?.candidate_count.toLocaleString()} prepared sites{coverage?.status === "partial" ? " in the covered portion" : ""}</dd></div>
         </dl>
-        <h2>Required limits</h2>
-        {requiredLimits.length ? <ul className="guide-review-limits">{requiredLimits.map(text => <li key={text}>{text}</li>)}</ul> : <p>No required limits set.</p>}
-        <p>Results describe modeled geometry for planning.</p>
+        {requiredLimits.length > 0 && <><h2>Required limits</h2>
+          <ul className="guide-review-limits">{requiredLimits.map(text => <li key={text}>{text}</li>)}</ul>
+        </>}
         <div className="guide-actions"><button className="secondary-button" onClick={() => setReview(false)}>Back to mission</button><button className="primary-button" onClick={() => void run()}>Find candidate sites</button></div>
       </> : <>
-        <PlanningMission request={draft} catalog={catalog} features={features} onChange={update} />
+        <PlanningMission request={draft} catalog={catalog} features={features} onChange={update} onOpenLibrary={() => setLibrary(true)} />
         <div className="guide-actions"><button className="secondary-button" onClick={() => go(1)}>Back to area</button><button className="primary-button" onClick={reviewMission}>Review mission <Icon name="arrow" size={16} /></button></div>
       </>}
       {validation.length > 0 && <div className="guide-error" role="alert"><ul>{validation.map(text => <li key={text}>{text}</li>)}</ul></div>}
     </section>}
-    {step === 3 && <section className="guide-stage"><h1 className="sr-only" tabIndex={-1} ref={heading}>Compare sites</h1>
+    {step === 3 && <section className="guide-stage guide-compare-stage">
+      <header className="guide-stage-heading guide-display-heading">
+        <h1 tabIndex={-1} ref={heading}>Compare lunar sites</h1>
+        {result && <p>{areaName(result.request.region)} · {priorityName(result.request)}</p>}
+      </header>
       {state?.phase === "complete" && result?.candidates.length ? <p className="sr-only" role="status">{state.message}</p> : state && <div className={`analysis-status ${state.phase}`} role="status"><strong>{phases[state.phase as keyof typeof phases] ?? "Analysis update"}</strong><p>{state.message}</p>{state.queue_position != null && <p>Queue position {state.queue_position}</p>}
         {busy && <SearchBudget />}{busy ? <button className="secondary-button" onClick={cancel}>Cancel analysis</button> : state.phase !== "complete" && <button className="secondary-button" onClick={() => { setStep(2); setReview(false); }}>Review and resubmit mission</button>}</div>}
-      {result && <><div className="applied-mission">
-        <div><strong>{areaName(result.request.region)}</strong><p>{utcRange(result.common_window)} · {priorityName(result.request)}</p></div>
-        <details className="applied-mission-tools"><summary>Mission exports</summary><div className="guide-actions">
-          <button className="secondary-button" onClick={() => setModal("summary")}>Create mission summary</button>
-          <button className="secondary-button" onClick={() => downloadJson(result, `lumen-${result.search_id}.json`)}>Export scientific JSON</button>
-        </div></details>
-      </div>
+      {result && <>
         <ScenarioBoard key={result.search_id} result={result} audience={audience} terrain={terrain} onInspect={id => void inspect(id)} onSummarySelection={setSummarySites} />
         <details className="advanced-mission" open={audience === "Planner"}><summary>Shortlist, terrain and scientific details</summary>
           <CandidateResults key={result.search_id} result={result} selected={selected} onSelect={id => void inspect(id)} />
         </details>
+        <details className="advanced-mission applied-mission-tools"><summary>Mission exports</summary><div className="guide-actions">
+          <button className="secondary-button" onClick={() => setModal("summary")}>Create mission summary</button>
+          <button className="secondary-button" onClick={() => downloadJson(result, `lumen-${result.search_id}.json`)}>Export scientific JSON</button>
+        </div></details>
       </>}
       <div className="guide-actions"><button className="secondary-button" onClick={() => go(2)}>Edit mission</button><button className="text-button" onClick={() => go(1)}>Choose another area</button></div>
     </section>}
