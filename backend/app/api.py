@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
+from time import perf_counter
 
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import JSONResponse
 from spiceypy.utils.exceptions import SpiceyError
 
 from app.models import ScenarioRequest, SearchRequest, SearchValidationResponse
 from app.services.bounded_analysis import bounded_analysis
 from app.services.dataset import DataUnavailable, dataset
 from app.services.ephemeris import load_kernels
+from app.services.json_response import ScientificJSONResponse as JSONResponse
+from app.services.profiling import phase
 from app.services.repository import is_tiled, read_asset, release_metadata
 from app.services.search import search
 from app.services.sites import SiteNotFound, scenario_analysis, site_analysis
@@ -115,7 +117,7 @@ def terrain() -> dict:
 @router.post("/search/validate", response_model=SearchValidationResponse)
 def search_validate(request: SearchRequest) -> SearchValidationResponse:
     try:
-        return validate_search(request)
+        return validate_search(request, hemisphere=bool(request.region.selector_type == "southern_hemisphere" or (request.region.center and request.region.center.latitude_deg > -87)))
     except SearchValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
@@ -124,11 +126,25 @@ def search_validate(request: SearchRequest) -> SearchValidationResponse:
 
 @router.post("/candidates/search")
 async def candidate_search(payload: SearchRequest, request: Request) -> JSONResponse:
-    return JSONResponse(await bounded_analysis("search", payload.model_dump(mode="json"), request))
+    result = await bounded_analysis("search", payload.model_dump(mode="json"), request)
+    started = perf_counter()
+    with phase("json_encoding"):
+        response = JSONResponse(result)
+    timings = getattr(request.state, "search_timings", {})
+    timings["json_encoding"] = perf_counter() - started
+    response.headers["Server-Timing"] = ", ".join(
+        f"{name};dur={seconds * 1000:.3f}" for name, seconds in timings.items()
+    )
+    return response
 
 
 def candidate_search_calculation(request: SearchRequest) -> dict:
     try:
+        if request.region.selector_type == "southern_hemisphere" or (request.region.center and request.region.center.latitude_deg > -87):
+            from app.services.hemisphere_terrain import prepare
+
+            validate_search(request, hemisphere=True)
+            return search(request, prepared=prepare(request.region))
         return search(request)
     except SearchValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

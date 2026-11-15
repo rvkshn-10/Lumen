@@ -58,7 +58,7 @@ def site_summary(arrays: dict, index: int) -> dict:
 
 
 def constraint_status(request: SearchRequest, arrays: dict, index: int, metrics: dict) -> dict:
-    region_pass = bool(region_mask(request, arrays)[index])
+    region_pass = True if str(arrays["ids"][index]).startswith("hemi-") else bool(region_mask(request, arrays)[index])
     terrain_pass = bool(terrain_mask(request, arrays)[index])
     time_pass = temporal_pass(request, metrics)
     return {
@@ -153,8 +153,14 @@ def provenance(metadata: dict) -> dict:
 
 
 def site_analysis(site_id: str, request: SearchRequest, *, include_alternatives: bool = True) -> dict:
-    validate_search(request, point_only=True)
-    metadata, arrays = load_site(settings.data_root, site_id) if is_tiled(settings.data_root) else dataset(settings.data_root)
+    hemisphere = site_id.startswith("hemi-")
+    validate_search(request, point_only=True, hemisphere=hemisphere)
+    if hemisphere:
+        from app.services.hemisphere_terrain import prepare
+
+        metadata, arrays = prepare(request.region)
+    else:
+        metadata, arrays = load_site(settings.data_root, site_id) if is_tiled(settings.data_root) else dataset(settings.data_root)
     arrays = with_proximity(
         arrays, request.hard_constraints.science_feature_ids, settings.data_root
     )
@@ -220,7 +226,7 @@ def site_analysis(site_id: str, request: SearchRequest, *, include_alternatives:
         ],
     }
     result["alternatives"] = []
-    if include_alternatives and not result["constraint_status"]["passes"]:
+    if include_alternatives and not hemisphere and not result["constraint_status"]["passes"]:
         from app.services.alternatives import site_alternatives
 
         result["alternatives"] = site_alternatives(request, arrays, index, detail["metrics"])
@@ -233,12 +239,18 @@ def metric_deltas(base: dict, changed: dict) -> dict:
 
 def scenario_analysis(scenario: ScenarioRequest) -> dict:
     request = scenario.request
-    validate_search(request)
+    hemisphere = scenario.site_id.startswith("hemi-")
+    validate_search(request, hemisphere=hemisphere)
     shifted = request.model_copy(deep=True)
     shifted.time_range.start_utc += timedelta(hours=scenario.delay_hours)
     shifted.time_range.end_utc += timedelta(hours=scenario.delay_hours)
-    validate_search(shifted)
-    metadata, arrays = load_site(settings.data_root, scenario.site_id, scenario.offset_radius_m) if is_tiled(settings.data_root) else dataset(settings.data_root)
+    validate_search(shifted, hemisphere=hemisphere)
+    if hemisphere:
+        from app.services.hemisphere_terrain import prepare
+
+        metadata, arrays = prepare(request.region)
+    else:
+        metadata, arrays = load_site(settings.data_root, scenario.site_id, scenario.offset_radius_m) if is_tiled(settings.data_root) else dataset(settings.data_root)
     arrays = with_proximity(
         arrays, request.hard_constraints.science_feature_ids, settings.data_root
     )

@@ -7,6 +7,8 @@ import { normalizePreferences } from "./weights";
 export interface CoverageCatalog {
   dataset_version: string;
   verified: boolean;
+  hemisphere_detailed?: boolean;
+  hemisphere_survey?: boolean;
   label: string;
   geometry: { type: "rectangle" | "cap" | "cap_tile"; extent_m: [number, number, number, number]; radius_m: number };
   excluded_locations: { x_m: number; y_m: number; radius_m: number; reason: string }[];
@@ -41,9 +43,21 @@ export function priorityName(request: SearchRequest) {
   return match >= 0 ? presetNames[match] : "Custom priorities";
 }
 export function areaName(region: SearchRequest["region"]) {
+  if (region.selector_type === "southern_hemisphere") return "Whole southern hemisphere · regional survey";
   if (region.selector_type === "full_supported_region") return "Full prepared region";
   const center = region.center;
   return `${region.input_text || (center ? coordinate(center.latitude_deg, center.longitude_deg_east) : "Choose a center")} · ${region.search_radius_km ?? "—"} km radius`;
+}
+export function usesHemisphereTerrain(request: SearchRequest) {
+  return request.region.selector_type === "southern_hemisphere" || !!(request.region.center && request.region.center.latitude_deg > -87);
+}
+export function coverageLabel(region: SearchRequest["region"], catalog: CoverageCatalog) {
+  if (region.selector_type === "southern_hemisphere") return "Whole southern hemisphere · regional survey";
+  if (region.center && region.center.latitude_deg > -87 && catalog.hemisphere_detailed) return "Southern hemisphere · detailed local terrain";
+  return catalog.label;
+}
+export function refineSurveyRequest(request: SearchRequest, site: Pick<Candidate, "latitude_deg" | "longitude_deg_east">): SearchRequest {
+  return { ...structuredClone(request), region: { selector_type: "circle", center: { latitude_deg: site.latitude_deg, longitude_deg_east: site.longitude_deg_east }, search_radius_km: 5 } };
 }
 export function publicLimitErrors(request: SearchRequest, catalog: CoverageCatalog) {
   const start = Date.parse(request.time_range.start_utc), end = Date.parse(request.time_range.end_utc);
@@ -54,7 +68,13 @@ export function publicLimitErrors(request: SearchRequest, catalog: CoverageCatal
       ["Full-region searches use October 1–31, 2028. Apply the demo window, or go back and choose a local area for other dates."];
   }
   const errors = [];
-  if ((request.region.search_radius_km ?? Infinity) > limits.maximum_radius_km) errors.push(`Live detailed areas have a maximum ${limits.maximum_radius_km} km radius. Edit the radius or choose the full-region demo.`);
+  if (request.region.selector_type === "southern_hemisphere" && !catalog.hemisphere_survey) errors.push("Whole-hemisphere survey data are unavailable on this service. Choose a local area or retry coverage.");
+  if (request.region.center && request.region.center.latitude_deg > -87 && !catalog.hemisphere_detailed) errors.push("Detailed hemisphere terrain is unavailable on this service. Choose a prepared polar area.");
+  if (usesHemisphereTerrain(request)) {
+    if (request.hard_constraints.maximum_distance_to_psr_km != null) errors.push("PSR-distance requirements are unavailable for hemisphere terrain. Remove the requirement under Advanced.");
+    if (request.hard_constraints.science_feature_ids?.length || request.hard_constraints.maximum_distance_to_science_feature_km != null) errors.push("Named-feature proximity requirements are unavailable for hemisphere terrain. Remove them explicitly under Advanced.");
+  }
+  if (request.region.selector_type !== "southern_hemisphere" && (request.region.search_radius_km ?? Infinity) > limits.maximum_radius_km) errors.push(`Live detailed areas have a maximum ${limits.maximum_radius_km} km radius. Edit the radius or choose the full-region demo.`);
   if (end - start > limits.maximum_live_days * 86400000) errors.push(`Live detailed missions last up to ${limits.maximum_live_days} days. Edit the dates or choose the full-region demo.`);
   return errors;
 }

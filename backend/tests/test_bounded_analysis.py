@@ -11,6 +11,15 @@ from fastapi import HTTPException
 from app.services import bounded_analysis as service
 
 
+@pytest.fixture(params=[False, True], autouse=True)
+def worker_mode(request, monkeypatch):
+    service.worker_pool.discard()
+    monkeypatch.setenv("LUMEN_REUSE_WORKER", "1" if request.param else "0")
+    monkeypatch.setattr(service.worker_pool, "source_revision", lambda environment: "test")
+    yield request.param
+    service.worker_pool.discard()
+
+
 class Connected:
     async def is_disconnected(self):
         return False
@@ -68,7 +77,7 @@ def test_disconnect_kills_worker(monkeypatch):
             return True
 
     with pytest.raises(HTTPException) as failure:
-        asyncio.run(service.bounded_analysis("preview", {}, Disconnected()))
+        asyncio.run(service.bounded_analysis("search", {}, Disconnected()))
     assert failure.value.status_code == 499
     assert processes[0].poll() is not None
     assert not service._active
@@ -79,6 +88,46 @@ def test_worker_result_is_decoded(monkeypatch):
     assert asyncio.run(service.bounded_analysis("search", {}, Connected())) == {"ok": True}
 
 
+def test_reusable_worker_retains_process_and_restarts_on_revision(monkeypatch, worker_mode):
+    if not worker_mode:
+        pytest.skip("Reusable protocol only")
+    processes = install_worker(
+        monkeypatch,
+        """
+import json, sys
+count = 0
+for line in sys.stdin:
+    payload = json.loads(line)
+    count += 1
+    print(json.dumps({"result": {"count": count, "payload": payload["payload"]}}), flush=True)
+""",
+    )
+    first = asyncio.run(service.bounded_analysis("search", {"a": 1}, Connected()))
+    second = asyncio.run(service.bounded_analysis("search", {"a": 2}, Connected()))
+    assert first == {"count": 1, "payload": {"a": 1}}
+    assert second == {"count": 2, "payload": {"a": 2}}
+    assert len(processes) == 1 and processes[0].poll() is None
+    monkeypatch.setattr(service.worker_pool, "source_revision", lambda environment: "changed")
+    third = asyncio.run(service.bounded_analysis("search", {}, Connected()))
+    assert third["count"] == 1
+    assert len(processes) == 2 and processes[0].poll() is not None
+
+
+def test_hemisphere_search_reuses_worker_by_default(monkeypatch, worker_mode):
+    if not worker_mode:
+        pytest.skip("Automatic reuse case")
+    monkeypatch.delenv("LUMEN_REUSE_WORKER")
+    processes = install_worker(monkeypatch, '''
+import json, sys
+for line in sys.stdin:
+    print(json.dumps({"result": {"ok": True}}), flush=True)
+''')
+    payload = {"region": {"center": {"latitude_deg": -35}}}
+    for _ in range(2):
+        assert asyncio.run(service.bounded_analysis("search", payload, Connected())) == {"ok": True}
+    assert len(processes) == 1 and processes[0].poll() is None
+
+
 def test_http_safety_watchdog_is_separate_from_latency_target(monkeypatch):
     from fastapi.testclient import TestClient
 
@@ -86,7 +135,7 @@ def test_http_safety_watchdog_is_separate_from_latency_target(monkeypatch):
 
     assert service.ANALYSIS_SECONDS == 120
     processes = install_worker(monkeypatch, "import time; time.sleep(60)")
-    monkeypatch.setattr(service, "ANALYSIS_SECONDS", .2)
+    monkeypatch.setattr(service, "ANALYSIS_SECONDS", 0.2)
     start = perf_counter()
     response = TestClient(app).post(
         "/api/v1/candidates/search",

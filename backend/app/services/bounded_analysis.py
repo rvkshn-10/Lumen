@@ -9,8 +9,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import orjson
 from fastapi import HTTPException, Request
 
+from app.services import worker_pool
 from app.settings import settings
 
 ANALYSIS_SECONDS = 120.0  # Safety watchdog; the performance target is successful averages under 30s.
@@ -31,6 +33,10 @@ async def bounded_analysis(operation: str, payload: dict, request: Request) -> d
     _active = True
     process = None
     communication = None
+    center = payload.get("region", {}).get("center") or {}
+    hemisphere_search = operation == "search" and (payload.get("region", {}).get("selector_type") == "southern_hemisphere" or center.get("latitude_deg", -90) > -87)
+    reuse = operation == "search" and os.getenv("LUMEN_REUSE_WORKER", "1" if hemisphere_search else "0") == "1"
+    successful = False
     try:
         async with asyncio.timeout(ANALYSIS_SECONDS):
             environment = os.environ.copy()
@@ -41,28 +47,37 @@ async def bounded_analysis(operation: str, payload: dict, request: Request) -> d
                 + os.pathsep
                 + environment.get("PYTHONPATH", "")
             )
-            # Uvicorn uses SelectorEventLoop on Windows, which lacks asyncio subprocesses.
-            process = subprocess.Popen(  # noqa: ASYNC220
-                [sys.executable, "-m", "app.analysis_worker", operation],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=environment,
-                creationflags=0x08000000 if os.name == "nt" else 0,
-            )
-            communication = asyncio.create_task(
-                asyncio.to_thread(process.communicate, json.dumps(payload).encode())
-            )
+            if reuse:
+                process = worker_pool.acquire(environment)
+                communication = asyncio.create_task(
+                    asyncio.to_thread(worker_pool.exchange, process, operation, payload)
+                )
+            else:
+                # Uvicorn uses SelectorEventLoop on Windows, which lacks asyncio subprocesses.
+                process = subprocess.Popen(  # noqa: ASYNC220
+                    [sys.executable, "-m", "app.analysis_worker", operation],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=environment,
+                    creationflags=0x08000000 if os.name == "nt" else 0,
+                )
+                communication = asyncio.create_task(
+                    asyncio.to_thread(process.communicate, json.dumps(payload).encode())
+                )
             while not communication.done():
                 if await request.is_disconnected():
                     raise HTTPException(499, "Analysis canceled.")
                 await asyncio.wait({communication}, timeout=0.05)
-            output, _ = communication.result()
+            output = communication.result() if reuse else communication.result()[0]
             if process.returncode:
                 raise HTTPException(503, "The analysis worker stopped. Your inputs are retained.")
-            result = json.loads(output)
+            result = orjson.loads(output)
             if "error" in result:
                 raise HTTPException(result["status"], result["error"])
+            if "timings" in result:
+                request.state.search_timings = result["timings"]
+            successful = True
             return result["result"]
     except TimeoutError as exc:
         raise HTTPException(
@@ -75,10 +90,17 @@ async def bounded_analysis(operation: str, payload: dict, request: Request) -> d
     except (OSError, ValueError, KeyError) as exc:
         raise HTTPException(503, "Analysis service unavailable. Your inputs are retained.") from exc
     finally:
-        if process is not None and process.poll() is None:
-            process.kill()
-            await asyncio.to_thread(process.wait)
-        if communication is not None and not communication.done():
-            communication.cancel()
-            await asyncio.gather(communication, return_exceptions=True)
-        _active = False
+        try:
+            if reuse and not successful:
+                await asyncio.to_thread(worker_pool.discard, process)
+            elif not reuse and process is not None and process.poll() is None:
+                process.kill()
+                await asyncio.to_thread(process.wait)
+        finally:
+            try:
+                if communication is not None:
+                    if not communication.done():
+                        communication.cancel()
+                    await asyncio.gather(communication, return_exceptions=True)
+            finally:
+                _active = False

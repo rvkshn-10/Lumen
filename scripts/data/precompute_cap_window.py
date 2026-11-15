@@ -25,9 +25,10 @@ from app.services.tile_metrics import cache_identity, identity_key, load_tile_me
 
 
 def prepare_tile(
-    root: Path, tile_id: str, kernel_root: Path, start, end, positions
+    root: Path, tile_id: str, kernel_root: Path, start, end, positions, output: Path | None = None
 ) -> None:
-    directory, output = root / tile_id, root / "demo-cache"
+    directory = root / tile_id
+    output = output or root / "demo-cache"
     metadata = json.loads((directory / "metadata.json").read_text())
     with np.load(directory / "terrain.npz", allow_pickle=False) as archive:
         arrays = {key: archive[key] for key in archive.files}

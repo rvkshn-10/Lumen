@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -20,6 +21,7 @@ app = FastAPI(
         "not flight-certified mission products."
     ),
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=1)
 app.include_router(router)
 app.include_router(exploration_router)
 app.include_router(global_router)

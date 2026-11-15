@@ -42,7 +42,38 @@
       "landing_page": "https://naif.jpl.nasa.gov/naif/data_generic.html",
       "purpose": "DE440 ephemerides and lunar orientation",
       "analysis_ready": true
+    },
+    {
+      "id": "hemisphere-lola-256ppd",
+      "landing_page": "https://pds-geosciences.wustl.edu/missions/lro/lola.htm",
+      "purpose": "Southern hemisphere detailed local terrain: elevation, 500 m slope/roughness and 200 km horizons",
+      "pixels_per_degree": 256,
+      "analysis_ready": true,
+      "probe_script": "scripts/data/probe_hemisphere_lola.py",
+      "requires_installation": true,
+      "installation_script": "scripts/data/install_hemisphere_lola.py",
+      "pinned_files": {
+        "south-000": {
+          "file": "ldem_256_90s_00s_000_180_float.img",
+          "bytes": 4246732800,
+          "sha256": "abaa972e1f8398414990d2860c3565c6f36464502c7a643f910394c8e79165b7"
+        },
+        "north-000": {
+          "file": "north-buffer-000.img",
+          "bytes": 353894400,
+          "sha256": "de192a76b56223d247a069a10903b69dbd85eb6630ff6428006d804281027914"
+        },
+        "south-180": {
+          "file": "ldem_256_90s_00s_180_360_float.img",
+          "bytes": 4246732800,
+          "sha256": "f7fc5aeebdc728831fecd9fe662e9e0841a73e892928a64e2ed07735f1f39d30"
+        },
+        "north-180": {
+          "file": "north-buffer-180.img",
+          "bytes": 353894400,
+          "sha256": "b975501f83bd6a80faa78ff33cd2f656e958455c2b1e535e7b01c8cd13805cbd"
+        }
+      }
     }
   ]
 }
-

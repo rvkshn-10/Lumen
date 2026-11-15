@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from collections import OrderedDict, deque
 from pathlib import Path
@@ -181,11 +182,19 @@ class TerrainStore:
         return result
 
     def load_tile(self, tile_id: str) -> dict:
+        return self._load_tile(tile_id, scalar_only=False)
+
+    def load_scalar_tile(self, tile_id: str) -> dict:
+        return self._load_tile(tile_id, scalar_only=True)
+
+    def _load_tile(self, tile_id: str, *, scalar_only: bool) -> dict:
+        cache_key = f"scalar:{tile_id}" if scalar_only else tile_id
+        columns = SCALAR_COLUMNS if scalar_only else ROW_COLUMNS
         with self._lock:
-            if tile_id in self._cache:
+            if cache_key in self._cache:
                 self._hits += 1
-                self._cache.move_to_end(tile_id)
-                return dict(self._cache[tile_id])
+                self._cache.move_to_end(cache_key)
+                return dict(self._cache[cache_key])
             try:
                 tile = self._tiles[tile_id]
                 path = self._path(tile["metadata_path"])
@@ -201,17 +210,27 @@ class TerrainStore:
                         or digest(artifact_path) != artifact["sha256"]
                     ):
                         raise ValueError(f"Tile artifact integrity failed: {name}")
-                with np.load(path.parent / "terrain.npz", allow_pickle=False) as archive:
-                    arrays = {key: archive[key] for key in (*ROW_COLUMNS, "horizon_azimuth_deg")}
+                from app.services.mapped_tiles import load_mapped
+
+                keys = (*columns, "horizon_azimuth_deg")
+                arrays = (
+                    load_mapped(path.parent / "mapped", tile["artifacts"]["terrain.npz"]["sha256"], keys)
+                    if os.getenv("LUMEN_MMAP_TILES", "0") == "1" else None
+                )
+                if arrays is None:
+                    with np.load(path.parent / "terrain.npz", allow_pickle=False) as archive:
+                        arrays = {key: archive[key] for key in keys}
                 n, bearings = tile["candidate_count"], arrays["horizon_azimuth_deg"]
                 if not np.array_equal(bearings, np.arange(0, 360, 5)):
                     raise ValueError("Unsupported horizon profile")
-                for key in ROW_COLUMNS:
+                for key in columns:
                     shape = (n, len(bearings)) if key in ROW_COLUMNS[-2:] else (n,)
                     if arrays[key].shape != shape:
                         raise ValueError(f"Invalid tile shape: {key}")
                     if key != "ids" and not np.isfinite(arrays[key]).all():
                         raise ValueError(f"Unknown scientific values: {key}")
+                arrays["spatial_x_order"] = np.argsort(arrays["x_m"], kind="stable")
+                arrays["spatial_x_sorted"] = arrays["x_m"][arrays["spatial_x_order"]]
                 size = sum(value.nbytes for value in arrays.values())
                 if size > self.max_cache_bytes:
                     raise DataUnavailable("Tile exceeds configured resident byte budget")
@@ -221,7 +240,7 @@ class TerrainStore:
                     self._evictions += 1
                 for value in arrays.values():
                     value.flags.writeable = False
-                self._cache[tile_id] = arrays
+                self._cache[cache_key] = arrays
                 self._resident_bytes += size
                 self._peak_bytes = max(self._peak_bytes, self._resident_bytes)
                 self._opened.append(tile_id)
@@ -234,20 +253,55 @@ class TerrainStore:
             except (OSError, KeyError, ValueError, TypeError) as exc:
                 raise DataUnavailable(f"Cannot load {tile_id}: {exc}") from exc
 
+    def load_ids(self, tile_id: str) -> np.ndarray:
+        """Verify site membership without decompressing horizons a second time."""
+        with self._lock:
+            for key in (tile_id, f"scalar:{tile_id}"):
+                if key in self._cache:
+                    return self._cache[key]["ids"]
+            try:
+                tile = self._tiles[tile_id]
+                metadata_path = self._path(tile["metadata_path"])
+                if digest(metadata_path) != tile["metadata_sha256"]:
+                    raise ValueError("Tile metadata checksum mismatch")
+                metadata = json.loads(metadata_path.read_text())
+                if metadata["artifacts"] != tile["artifacts"]:
+                    raise ValueError("Tile artifact catalog mismatch")
+                path = metadata_path.parent / "terrain.npz"
+                artifact = tile["artifacts"]["terrain.npz"]
+                if path.stat().st_size != artifact["bytes"] or digest(path) != artifact["sha256"]:
+                    raise ValueError("Tile artifact integrity failed: terrain.npz")
+                with np.load(path, allow_pickle=False) as archive:
+                    ids = archive["ids"]
+                if ids.shape != (tile["candidate_count"],):
+                    raise ValueError("Invalid tile site IDs")
+                ids.flags.writeable = False
+                return ids
+            except (OSError, KeyError, ValueError, TypeError) as exc:
+                raise DataUnavailable(f"Cannot load IDs for {tile_id}: {exc}") from exc
+
     def load_area(self, latitude_deg: float, longitude_deg_east: float, radius_km: float) -> dict:
         tiles = self.intersecting_tiles(latitude_deg, longitude_deg_east, radius_km)
         pieces = {key: [] for key in ROW_COLUMNS}
         lat0, lon0 = np.deg2rad([latitude_deg, longitude_deg_east])
+        north = latitude_deg + np.rad2deg(radius_km / 1737.4)
+        rho = 2 * 1737400 * np.tan(np.pi / 4 + lat0 / 2)
+        cx, cy = rho * np.sin(lon0), rho * np.cos(lon0)
+        bound = radius_km * 1000 * 2 / (1 - np.sin(np.deg2rad(north))) if north < 89 else np.inf
         for tile_id in tiles:
             arrays = self.load_tile(tile_id)
-            lat, lon = np.deg2rad(arrays["lat_deg"]), np.deg2rad(arrays["lon_deg"])
+            order, xs = arrays["spatial_x_order"], arrays["spatial_x_sorted"]
+            lo, hi = np.searchsorted(xs, [cx-bound-1e-6, cx+bound+1e-6], side="left")
+            hits = order[lo:hi]
+            hits = hits[np.abs(arrays["y_m"][hits] - cy) <= bound + 1e-6]
+            lat, lon = np.deg2rad(arrays["lat_deg"][hits]), np.deg2rad(arrays["lon_deg"][hits])
             hav = (
                 np.sin((lat - lat0) / 2) ** 2
                 + np.cos(lat) * np.cos(lat0) * np.sin((lon - lon0) / 2) ** 2
             )
             inside = 2 * 1737.4 * np.arcsin(np.sqrt(np.clip(hav, 0, 1))) <= radius_km
             for key in ROW_COLUMNS:
-                pieces[key].append(arrays[key][inside])
+                pieces[key].append(arrays[key][hits[inside]])
         result = {}
         for key, chunks in pieces.items():
             shape = (0, 72) if key in ROW_COLUMNS[-2:] else (0,)

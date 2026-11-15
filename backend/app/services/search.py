@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import UTC
 from functools import lru_cache
 from itertools import pairwise
@@ -23,8 +24,9 @@ from app.services.ephemeris import (
     solar_disk_fraction,
     visibility_metrics,
 )
-from app.services.proximity import science_utility, with_proximity
-from app.services.repository import is_tiled, load_area, selected_metrics
+from app.services.profiling import phase
+from app.services.proximity import with_proximity
+from app.services.repository import is_tiled, load_area, selected_metrics, store
 from app.services.scoring_reference import scoring_reference
 from app.services.suitability import LEGEND, suitability_class
 from app.services.validation import SearchValidationError, validate_search
@@ -234,6 +236,14 @@ def analyze_batch(arrays: dict, indices: np.ndarray, times, sun, earth) -> list[
     ]
 
 
+def evaluate_metrics(arrays, indices, times, sun, earth):
+    if os.getenv("LUMEN_TEMPORAL_KERNEL", "reference") == "compiled":
+        from app.services.temporal_kernel import evaluate_batch
+
+        return evaluate_batch(arrays, indices, times, sun, earth)
+    return analyze_batch(arrays, indices, times, sun, earth)
+
+
 @lru_cache(maxsize=2)
 def cached_metrics(
     data_root,
@@ -264,7 +274,7 @@ def cached_metrics(
     rows = []
     for offset in range(0, len(indices), 64):
         batch = np.asarray(indices[offset : offset + 64], dtype=np.int32)
-        rows.extend(analyze_batch(arrays, batch, times, sun, earth))
+        rows.extend(evaluate_metrics(arrays, batch, times, sun, earth))
     return tuple(rows)
 
 
@@ -356,7 +366,7 @@ def category_scores(
     }
 
 
-def map_sample(ranked: list[tuple], arrays: dict, selected: list[tuple], limit: int = 5000):
+def map_sample_reference(ranked: list[tuple], arrays: dict, selected: list[tuple], limit: int = 5000):
     """Keep top scoring points per spatial cell and every shortlisted point."""
     if len(ranked) <= limit:
         return ranked
@@ -377,13 +387,37 @@ def map_sample(ranked: list[tuple], arrays: dict, selected: list[tuple], limit: 
         side *= 1.2
 
 
-def search(request: SearchRequest, *, timings: dict | None = None) -> dict:
+def map_sample(ranked: list[tuple], arrays: dict, selected: list[tuple], limit: int = 5000):
+    """Same first-in-cell sample as the reference, with vectorized cell lookup."""
+    if len(ranked) <= limit:
+        return ranked
+    selected_ids = {row[1] for row in selected}
+    indices = np.fromiter((row[2] for row in ranked), dtype=np.intp, count=len(ranked))
+    mandatory = np.fromiter((row[1] in selected_ids for row in ranked), dtype=bool,
+                            count=len(ranked))
+    x, y = arrays["x_m"], arrays["y_m"]
+    side = max(float(np.ptp(x)), float(np.ptp(y))) / np.sqrt(limit - len(selected_ids))
+    ranked_x = np.asarray(x[indices], dtype=np.float64)
+    ranked_y = np.asarray(y[indices], dtype=np.float64)
+    while True:
+        cells = np.column_stack((np.floor(ranked_x / side), np.floor(ranked_y / side)))
+        _, first = np.unique(cells, axis=0, return_index=True)
+        keep = mandatory.copy()
+        keep[first] = True
+        if np.count_nonzero(keep) <= limit:
+            return [ranked[i] for i in np.flatnonzero(keep)]
+        side *= 1.2
+
+
+def search(request: SearchRequest, *, timings: dict | None = None, prepared=None) -> dict:
     started = perf_counter()
-    validation = validate_search(request)
-    metadata, arrays = load_area(settings.data_root, request.region) if is_tiled(settings.data_root) else dataset(settings.data_root)
-    arrays = with_proximity(
-        arrays, request.hard_constraints.science_feature_ids, settings.data_root
-    )
+    with phase("validation"):
+        validation = validate_search(request, hemisphere=prepared is not None)
+    with phase("load_area"):
+        metadata, arrays = prepared if prepared is not None else (load_area(settings.data_root, request.region, scalar_only=True) if is_tiled(settings.data_root) else dataset(settings.data_root))
+        arrays = with_proximity(
+            arrays, request.hard_constraints.science_feature_ids, settings.data_root
+        )
     kernels = load_kernels(settings.kernel_root)
     weights = validation.normalized_preferences.model_dump()
     science_available = "distance_psr_km" in arrays or "distance_science_feature_km" in arrays
@@ -419,85 +453,88 @@ def search(request: SearchRequest, *, timings: dict | None = None) -> dict:
     reference = scoring_reference(metadata, arrays)
     anchors = reference["bounds"]
     duration_hours = (end - start).total_seconds() / 3600
-    mask = region_mask(request, arrays)
-    terrain = mask & terrain_mask(request, arrays)
-    indices = np.flatnonzero(terrain)
+    with phase("region_mask"):
+        mask = np.ones(len(arrays["lat_deg"]),dtype=bool) if prepared is not None else region_mask(request, arrays)
+    with phase("terrain_mask"):
+        terrain = mask & terrain_mask(request, arrays)
+        indices = np.flatnonzero(terrain)
     filtered_at = perf_counter()
-    times, sun, earth = body_positions(settings.kernel_root, start, end, 5)
+    with phase("body_positions"):
+        times, sun, earth = body_positions(settings.kernel_root, start, end, 5)
     ephemeris_at = perf_counter()
-    artifact_fingerprint = dataset_fingerprint(metadata, arrays)
-    metrics_rows = selected_metrics(settings.data_root, metadata, arrays, indices, settings.kernel_root, start, end) if is_tiled(settings.data_root) else cached_metrics(
-        settings.data_root,
-        artifact_fingerprint,
-        tuple(item["sha256"] for item in kernels),
-        start,
-        end,
-        tuple(int(i) for i in indices),
-    )
-    ranked = []
-    for i, metrics in zip(indices, metrics_rows, strict=True):
-        if not temporal_pass(request, metrics):
-            continue
-        scores = category_scores(
-            metrics,
-            float(arrays["slope_deg"][i]),
-            float(arrays["roughness_m"][i]),
-            float(arrays["elevation_m"][i]),
-            duration_hours,
-            anchors,
-        )
-        scores["science_proximity"] = science_utility(
-            float(arrays["distance_psr_km"][i]) if "distance_psr_km" in arrays else None,
-            float(arrays["distance_science_feature_km"][i])
-            if "distance_science_feature_km" in arrays
-            else None,
-        )
-        score = 100 * sum(weights[k] * (v or 0) for k, v in scores.items())
-        ranked.append((score, str(arrays["ids"][i]), int(i), scores, metrics))
-    analyzed_at = perf_counter()
-    ranked.sort(key=lambda item: (-item[0], item[1]))
-    selected = []
-    for row in ranked:
-        i = row[2]
-        if all(
-            np.hypot(arrays["x_m"][i] - arrays["x_m"][r[2]], arrays["y_m"][i] - arrays["y_m"][r[2]])
-            >= 1500
-            for r in selected
-        ):
-            selected.append(row)
-        if len(selected) == 5:
-            break
-    map_ranked = map_sample(ranked, arrays, selected)
-    candidates = []
-    for rank, (score, site_id, i, scores, metrics) in enumerate(selected, 1):
-        detail = analyze(arrays, i, times, sun, earth, timeline=True)
-        from app.services.candidate_extras import enrich
-        from app.services.sites import visible_at
+    with phase("cached_metrics"):
+        artifact_fingerprint = dataset_fingerprint(metadata, arrays)
+        if prepared is not None:
+            metrics_rows = []
+            for offset in range(0,len(indices),32):
+                metrics_rows.extend(evaluate_metrics(arrays,indices[offset:offset+32],times,sun,earth))
+        else:
+            metrics_rows = selected_metrics(settings.data_root, metadata, arrays, indices, settings.kernel_root, start, end, columnar=True) if is_tiled(settings.data_root) else cached_metrics(
+                settings.data_root,
+                artifact_fingerprint,
+                tuple(item["sha256"] for item in kernels),
+                start,
+                end,
+                tuple(int(i) for i in indices),
+            )
+    with phase("category_scores"):
+        from app.services.ranking import rank_columns
 
-        sun_distance = local_sky(float(arrays["lat_deg"][i]), float(arrays["lon_deg"][i]),
-                                 float(arrays["elevation_m"][i]), sun)[2]
-        enrich(detail, request, lambda instant, body, index=i: visible_at(arrays, index, instant, body),
-               sun_distance=sun_distance)
-        candidates.append(
-            {
-                "id": site_id,
-                "rank": rank,
-                "score": score,
-                "latitude_deg": float(arrays["lat_deg"][i]),
-                "longitude_deg_east": float(arrays["lon_deg"][i]),
-                **{
-                    key: float(arrays[key][i])
-                    for key in ("x_m", "y_m", "elevation_m", "slope_deg", "roughness_m")
-                },
-                "criteria_scores": scores,
-                **{
-                    key: float(arrays[key][i])
-                    for key in ("distance_psr_km", "distance_science_feature_km")
-                    if key in arrays
-                },
-                **detail,
-            }
+        ranked, materialize = rank_columns(
+            request, arrays, indices, metrics_rows, weights, duration_hours, anchors
         )
+    analyzed_at = perf_counter()
+    with phase("sort_separation"):
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        selected = []
+        for row in ranked:
+            i = row[2]
+            if all(
+                np.hypot(arrays["x_m"][i] - arrays["x_m"][r[2]], arrays["y_m"][i] - arrays["y_m"][r[2]])
+                >= 1500
+                for r in selected
+            ):
+                selected.append(row)
+            if len(selected) == 5:
+                break
+    with phase("map_sample"):
+        map_ranked = [materialize(row) for row in map_sample(ranked, arrays, selected)]
+        selected = [materialize(row) for row in selected]
+    with phase("shortlist_details"):
+        candidates = []
+        for rank, (score, site_id, i, scores, metrics) in enumerate(selected, 1):
+            detail_arrays, detail_i = arrays, i
+            if "horizons_deg" not in arrays:
+                detail_arrays = store(settings.data_root).site(site_id)
+                detail_i = 0
+            detail = analyze(detail_arrays, detail_i, times, sun, earth, timeline=True)
+            from app.services.candidate_extras import enrich
+            from app.services.sites import visible_at
+
+            sun_distance = local_sky(float(arrays["lat_deg"][i]), float(arrays["lon_deg"][i]),
+                                     float(arrays["elevation_m"][i]), sun)[2]
+            enrich(detail, request, lambda instant, body, index=detail_i, source=detail_arrays: visible_at(source, index, instant, body),
+                   sun_distance=sun_distance)
+            candidates.append(
+                {
+                    "id": site_id,
+                    "rank": rank,
+                    "score": score,
+                    "latitude_deg": float(arrays["lat_deg"][i]),
+                    "longitude_deg_east": float(arrays["lon_deg"][i]),
+                    **{
+                        key: float(arrays[key][i])
+                        for key in ("x_m", "y_m", "elevation_m", "slope_deg", "roughness_m")
+                    },
+                    "criteria_scores": scores,
+                    **{
+                        key: float(arrays[key][i])
+                        for key in ("distance_psr_km", "distance_science_feature_km")
+                        if key in arrays
+                    },
+                    **detail,
+                }
+            )
     request_json = request.model_dump(mode="json")
     provenance = {
         "engine_version": "exploration-2.0.0",
@@ -514,7 +551,7 @@ def search(request: SearchRequest, *, timings: dict | None = None) -> dict:
         "shortlist_minimum_separation_m": 1500,
         "score_anchors": {
             "reference_id": reference["id"],
-            "method": "full prepared dataset 5th/95th percentiles, clipped linear utility",
+            "method": reference.get("method", "fixed hemisphere terrain bounds" if prepared is not None else "full prepared dataset 5th/95th percentiles, clipped linear utility"),
             "bounds": anchors,
             "terrain_weights": {"slope": 0.45, "roughness": 0.35, "elevation": 0.20},
             "elevation_preference": "higher elevation",
@@ -584,11 +621,27 @@ def search(request: SearchRequest, *, timings: dict | None = None) -> dict:
             "step_minutes": 5,
         },
     }
+    if prepared is not None:
+        result["terrain_data"] = metadata.get("display_terrain")
+        if request.region.selector_type == SelectorType.southern_hemisphere:
+            result["survey"] = {"scope":"southern_hemisphere", "candidate_spacing_km":151.6166,
+                                "candidate_count":len(arrays["ids"]), "refinement_radius_km":5}
+            result["warnings"].append("Whole-hemisphere ranking compares regional survey locations about 150 km apart; it does not rank every 500 m point. Use local detailed search to refine the shortlist.")
+        result["warnings"].extend([
+            "LOLA source spacing is approximately 118 m north-south; gridded terrain misses smaller hazards.",
+            "Slope uses central differences over 500 m; roughness is RMS plane residual over a 500 m footprint.",
+            "Hemisphere terrain scores use fixed bounds and are not calibrated to polar product scores.",
+            "Survey horizons use the approximately 1.9 km global elevation grid, sampled every 2 km to 200 km; detailed local refinement uses the 118 m source." if request.region.selector_type == SelectorType.southern_hemisphere else "Horizon bearings are sampled every 5 degrees, radially about 118 m to 20 km and 472 m to 200 km.",
+            "Only southern candidates are ranked when the search circle crosses the equator.",
+        ])
     result["suitability_legend"] = LEGEND
     result["alternatives"] = []
-    if not candidates and mask.any():
+    if not candidates and mask.any() and request.region.selector_type != SelectorType.southern_hemisphere:
         from app.services.alternatives import search_alternatives
 
+        if "horizons_deg" not in arrays:
+            _, arrays = load_area(settings.data_root, request.region)
+            arrays = with_proximity(arrays, request.hard_constraints.science_feature_ids, settings.data_root)
         result["alternatives"] = search_alternatives(request, arrays, mask, times, sun, earth)
     if not candidates:
         result["empty_reason"] = (

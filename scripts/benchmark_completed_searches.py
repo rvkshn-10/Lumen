@@ -20,7 +20,27 @@ def main():
     parser.add_argument(
         "--output", type=Path, default=Path("data/cache/orbital-qa/search-latency.json")
     )
+    parser.add_argument("--scenarios", type=Path)
+    parser.add_argument("--result-dir", type=Path)
+    parser.add_argument("--baseline", type=Path)
+    parser.add_argument("--budget", choices=["step6", "final"], default="final")
     args = parser.parse_args()
+    if args.repeat < 1:
+        parser.error("--repeat must be positive")
+    if args.scenarios:
+        import platform
+        from datetime import UTC, datetime
+
+        from bench.run import run
+
+        report = run(args.scenarios, args.url, args.repeat, args.baseline,
+                     args.operation, args.budget, args.result_dir)
+        output = args.output
+        if output == Path("data/cache/orbital-qa/search-latency.json"):
+            output = Path("bench") / platform.node() / (datetime.now(UTC).strftime("%Y-%m-%dT%H%M%SZ") + ".json")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, indent=2) + "\n")
+        raise SystemExit(0 if report["passed"] else 1)
     window = {"start_utc": "2028-10-01T00:00:00Z", "end_utc": "2028-10-08T00:00:00Z"}
     circle = {
         "selector_type": "circle",

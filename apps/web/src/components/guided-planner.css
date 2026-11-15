@@ -119,6 +119,19 @@
 @media (max-width: 650px) { .area-3d-preview { height: 420px; } .area-view-switch button { flex: 1; padding: 8px; } .polar-view-caption { font-size: 10px; } }
 .moon-loading { position: absolute; top: 70px; left: 20px; right: 20px; color: #e2ede3; font-size: 13px; background: #101819dd; padding: 10px; pointer-events: none; }
 .area-layout > div { min-width: 0; }
+.guide-stage[hidden] { display: none !important; }
+.search-scope-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 20px 0 16px; }
+.search-scope-grid button { display: grid; gap: 10px; text-align: left; align-content: start; padding: 20px; border: 1px solid #496050; border-radius: 10px; background: #16221b; color: #dbe5dd; line-height: 1.5; }
+.search-scope-grid button strong { font-size: 18px; color: #edf4e9; }
+.search-scope-grid button > span:not(.eyebrow), .search-scope-grid small { color: #b7c9bb; }
+.search-scope-grid button[aria-pressed="true"] { border-color: #c5ddbc; box-shadow: inset 0 0 0 1px #c5ddbc; background: #253a2a; }
+.search-scope-grid button:disabled { opacity: .55; cursor: not-allowed; }
+.search-scope-grid button:focus-visible { outline: 3px solid #f6cc80; outline-offset: 3px; }
+.scope-explanation { max-width: 76ch; color: #bdcec1; line-height: 1.7; }
+.scope-summary, .survey-refinement { padding: 24px; border: 1px solid #496050; border-radius: 10px; background: #18271e; line-height: 1.7; }
+.scope-summary h3, .survey-refinement h3 { margin: 8px 0; }
+.survey-refinement { margin: 20px 0; }
+@media (max-width: 650px) { .search-scope-grid { grid-template-columns: 1fr; gap: 10px; } .search-scope-grid button { padding: 16px; gap: 6px; } .scope-summary, .survey-refinement { padding: 18px; } }
 .area-3d-preview canvas, .terrain-3d-frame canvas { max-width: 100%; }
 
 .candidate-globe { height: 680px; margin: 16px 0; }

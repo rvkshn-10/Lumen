@@ -6,6 +6,20 @@ on:
   pull_request:
 
 jobs:
+  performance-equivalence:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e "./backend[dev,performance]"
+      - run: python -m pytest backend/tests/test_search_performance.py backend/tests/test_speed_gate.py
+
   web:
     runs-on: ubuntu-24.04
     steps:
