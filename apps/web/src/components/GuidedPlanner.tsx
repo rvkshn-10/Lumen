@@ -16,7 +16,6 @@ import { demoComparison } from "../lib/demo-comparison";
 import { SharedScenarioBoard } from "./SharedScenarioBoard";
 import { ScenarioBoard } from "./ScenarioBoard";
 import { CuratedPicker, ExperienceTools } from "./ExperienceTools";
-import { CandidateResults } from "./CandidateResults";
 import { MissionSummary, PlanningEvidence } from "./PlanningEvidence";
 import { MissionLibrary } from "./MissionStudio";
 import { SearchBudget } from "./SearchBudget";
@@ -109,29 +108,33 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
     setDraft(current => ({ ...current, region: coverage.region }));
     go(2);
   }
-  function reviewMission() {
-    if (!catalog || !areaReady) { setValidation(["Return to Area and verify coverage before submitting."]); return; }
+  function missionErrors() {
+    if (!catalog || !areaReady || !coverage) return ["Return to Area and verify coverage before submitting."];
     const errors = publicLimitErrors(draft, catalog);
     if (Date.parse(draft.time_range.start_utc) < Date.parse(manifest?.valid_time_range.start_utc ?? "2025-01-01") || Date.parse(draft.time_range.end_utc) > Date.parse(manifest?.valid_time_range.end_utc ?? "2036-01-01")) errors.push("Choose dates within the backend-advertised ephemeris range.");
     if (!catalog.layers.psr_distance && draft.hard_constraints.maximum_distance_to_psr_km != null) errors.push("The applied PSR-distance requirement is unavailable. Remove it explicitly under Advanced or load a dataset with that layer.");
+    return errors;
+  }
+  function reviewMission() {
+    const errors = missionErrors();
     setValidation(errors); if (!errors.length) setReview(true);
   }
   async function run() {
-    if (!catalog || !coverage || !areaReady) { setValidation(["Recheck scientific coverage before analysis."]); return; }
-    const errors = publicLimitErrors(draft, catalog); if (errors.length) { setValidation(errors); setReview(false); return; }
+    const errors = missionErrors();
+    if (errors.length || !catalog || !coverage) { setValidation(errors); setReview(false); return; }
     requestController.current?.abort(); inspectionController.current?.abort();
     const abort = new AbortController(); requestController.current = abort;
     const current = ++version.current;
     const applied = structuredClone({ ...draft, region: coverage.region });
     const coverageText = `${catalog.label}; ${coverage.status === "partial" ? "acknowledged supported intersection only" : "supported selection"}; ${coverage.candidate_count.toLocaleString()} prepared candidate locations.`;
-    setBusy(true); setStep(3); setModal(null); setValidation([]); setState({ phase: "submitting", message: "Submitting your applied mission…" });
+    setBusy(true); setStep(3); setModal(null); setInspecting(false); setValidation([]); setState({ phase: "submitting", message: "Submitting your applied mission…" });
     try {
       const next = await runAnalysis(applied, catalog, abort.signal, (progress: AnalysisState) => { if (current === version.current && !abort.signal.aborted) setState(progress); });
       if (abort.signal.aborted || current !== version.current) return;
       if (!next.counts.region) throw new PlanningError("This area has no supported candidate locations. Choose another area; this is not a successful empty search.", "outside", 422);
       setResult(next); setDraft(structuredClone(next.request)); setAppliedCoverage(coverageText);
       setSelected(next.candidates[0]?.id ?? null); setExtraSite(null); setSummarySites([]);
-      setState({ phase: "complete", message: next.candidates.length ? "Your shortlist is ready. Select scenarios on the board to compare them." : "The supported area was analyzed, but no sites meet every required limit." });
+      setState({ phase: "complete", message: next.candidates.length ? "Your sites are ready to compare." : "The supported area was analyzed, but no sites meet every required limit." });
     } catch (reason) {
       if (abort.signal.aborted || current !== version.current) return;
       setState({ phase: reason instanceof PlanningError ? reason.code : "failed", message: reason instanceof Error ? reason.message : "Analysis failed. Inputs are retained." });
@@ -144,6 +147,7 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
   async function inspect(id: string) {
     if (!result) return;
     inspectionController.current?.abort();
+    setInspecting(false);
     const known = result.candidates.find(item => item.id === id);
     if (known) { setSelected(id); setExtraSite(null); setModal("site"); return; }
     const point = result.map_candidates?.find(item => item.id === id); if (!point) return;
@@ -169,7 +173,6 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
   }
   function openCompare() {
     if (!shared.length && (result || busy || state)) go(3);
-    else if (!shared.length && canShowDemo) openDemo();
   }
   return <>
     <header className="planner-masthead">
@@ -182,14 +185,14 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
           <button type="button" aria-current={currentStep === 2 ? "step" : undefined}
             disabled={!areaReady || radiusExceedsLimit} onClick={continueToMission}>Mission</button>
           <button type="button" aria-current={currentStep === 3 ? "step" : undefined}
-            disabled={currentStep !== 3 && !result && !busy && !state && !canShowDemo} onClick={openCompare}>Compare</button>
+            disabled={currentStep !== 3 && !result && !busy && !state} onClick={openCompare}>Compare</button>
         </nav>
         <ExperienceTools appearance={appearance} onAppearance={onAppearance}
           audience={audience} onAudience={setAudience} candidateCount={catalog?.candidate_count} />
       </div>
     </header>
     <div className={`guided-planner explorer-${currentStep === 1 ? "area" : currentStep === 2 ? "mission" : "comparison"}`} id="explorer">
-      {shared.length ? <SharedScenarioBoard links={shared} demo={shared === demoComparison} audience={audience} terrain={terrain} /> : <>
+      {shared.length ? <SharedScenarioBoard links={shared} demo={shared === demoComparison} audience={audience} terrain={terrain} onChooseArea={openArea} /> : <>
     {import.meta.env.VITE_LUMEN_MOCK === "1" && <p className="changed-notice" role="status">Mock mode · synthetic analysis and replay data</p>}
     {result && stale && <div className="changed-notice" role="status">These results and exports use the previous mission. Review and run your edits to update them.</div>}
     {loadError && <div className="guide-error" role="alert"><h2>Service waking up or coverage unavailable</h2><p>{loadError}</p><p>Your inputs are retained.</p><button className="secondary-button" onClick={() => setRefresh(value => value + 1)}>Retry loading coverage</button></div>}
@@ -197,6 +200,7 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
     {catalog && step === 1 && <section className="guide-stage guide-area-stage">
       <header className="guide-stage-heading guide-display-heading">
         <h1 tabIndex={-1} ref={heading}>Choose an area</h1>
+        <p>Pick where to search on the Moon. You’ll choose individual sites after setting your mission.</p>
         <div className="guide-stage-tools">
           <CuratedPicker features={features} onPick={place => update({ ...draft, region: { selector_type: "circle", center: { latitude_deg: place.latitude_deg, longitude_deg_east: place.longitude_deg_east }, search_radius_km: 3 } })} />
           {canShowDemo && <button className="text-button" onClick={openDemo}>Open the demo comparison <Icon name="arrow" size={15} /></button>}
@@ -211,6 +215,7 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
     {catalog && step === 2 && <section className="guide-stage guide-mission-stage">
       <header className="guide-stage-heading guide-display-heading">
         <h1 tabIndex={-1} ref={heading}>{review ? "Review mission" : "Set the mission"}</h1>
+        {!review && <p>Set the dates and priorities, then find sites to compare.</p>}
       </header>
       {review ? <>
         <dl className="review-facts">
@@ -225,22 +230,25 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
         <div className="guide-actions"><button className="secondary-button" onClick={() => setReview(false)}>Back to mission</button><button className="primary-button" onClick={() => void run()}>Find candidate sites</button></div>
       </> : <>
         <PlanningMission request={draft} catalog={catalog} features={features} onChange={update} onOpenLibrary={() => setLibrary(true)} />
-        <div className="guide-actions"><button className="secondary-button" onClick={() => go(1)}>Back to area</button><button className="primary-button" onClick={reviewMission}>Review mission <Icon name="arrow" size={16} /></button></div>
+        <div className="guide-actions">
+          <button className="secondary-button" onClick={() => go(1)}>Back to area</button>
+          <div className="mission-search-actions">
+            <button className="text-button" onClick={reviewMission}>Review mission</button>
+            <button className="primary-button" onClick={() => void run()}>Find candidate sites <Icon name="arrow" size={16} /></button>
+          </div>
+        </div>
       </>}
       {validation.length > 0 && <div className="guide-error" role="alert"><ul>{validation.map(text => <li key={text}>{text}</li>)}</ul></div>}
     </section>}
-    {step === 3 && <section className="guide-stage guide-compare-stage">
+    {(step === 3 || result) && <section className="guide-stage guide-compare-stage" hidden={step !== 3}>
       <header className="guide-stage-heading guide-display-heading">
-        <h1 tabIndex={-1} ref={heading}>Compare lunar sites</h1>
+        <h1 tabIndex={-1} ref={step === 3 ? heading : undefined}>Compare lunar sites</h1>
         {result && <p>{areaName(result.request.region)} · {priorityName(result.request)}</p>}
       </header>
       {state?.phase === "complete" && result?.candidates.length ? <p className="sr-only" role="status">{state.message}</p> : state && <div className={`analysis-status ${state.phase}`} role="status"><strong>{phases[state.phase as keyof typeof phases] ?? "Analysis update"}</strong><p>{state.message}</p>{state.queue_position != null && <p>Queue position {state.queue_position}</p>}
         {busy && <SearchBudget />}{busy ? <button className="secondary-button" onClick={cancel}>Cancel analysis</button> : state.phase !== "complete" && <button className="secondary-button" onClick={() => { setStep(2); setReview(false); }}>Review and resubmit mission</button>}</div>}
       {result && <>
         <ScenarioBoard key={result.search_id} result={result} audience={audience} terrain={terrain} onInspect={id => void inspect(id)} onSummarySelection={setSummarySites} />
-        <details className="advanced-mission" open={audience === "Planner"}><summary>Shortlist, terrain and scientific details</summary>
-          <CandidateResults key={result.search_id} result={result} selected={selected} onSelect={id => void inspect(id)} />
-        </details>
         <details className="advanced-mission applied-mission-tools"><summary>Mission exports</summary><div className="guide-actions">
           <button className="secondary-button" onClick={() => setModal("summary")}>Create mission summary</button>
           <button className="secondary-button" onClick={() => downloadJson(result, `lumen-${result.search_id}.json`)}>Export scientific JSON</button>
@@ -250,7 +258,7 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
     </section>}
     {inspecting && <p role="status">Loading this location’s evidence…</p>}
     {result && modal === "site" && site && <PlanningEvidence key={`${result.search_id}-${site.id}`} site={site} result={result} compare={summarySites.map(item => item.id)} terrain={terrain} manifest={manifest} psr={psr} features={features} onExplore={id => void inspect(id)} stale={stale} onDelay={hours => { update(shiftWindow(result.request, hours)); setModal(null); go(2); }} onClose={() => setModal(null)} />}
-    {result && modal === "summary" && <MissionSummary result={result} sites={summarySites.length ? summarySites : site ? [site] : []} coverage={appliedCoverage} stale={stale} onClose={() => setModal(null)} />}
+    {result && modal === "summary" && <MissionSummary result={result} sites={summarySites} coverage={appliedCoverage} stale={stale} onClose={() => setModal(null)} />}
     {library && <MissionLibrary value={draft} scienceAvailable={!!catalog?.layers.psr_distance} onLoad={request => { update(request); go(1); }} onClose={() => setLibrary(false)} />}
       </>}
     </div>

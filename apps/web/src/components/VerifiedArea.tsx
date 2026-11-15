@@ -89,6 +89,7 @@ export function VerifiedArea({ catalog, request, features, terrain, outcome, pen
     </div>
     {error && <div className="area-feedback"><p>{error}</p><button className="secondary-button" onClick={onRetry}>Retry coverage check</button></div>}
     {outcome?.status === "outside" && <div className="area-feedback">
+      <p className="field-hint">Choose a prepared south-pole area to compare detailed mission results.</p>
       {southernCoordinate(center) && <a className="text-button" href="#area-preview">Preview this area</a>}
       <button className="text-button" onClick={() => selectCoordinate({ latitude_deg: -89.9, longitude_deg_east: 0 })}>Use a supported south-pole area</button>
     </div>}

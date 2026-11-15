@@ -32,7 +32,7 @@ export function MissionSummary({ result, sites, coverage, onClose, stale }: { re
   const html = summaryHtml(result, sites, coverage);
   return <PlanningDialog title="Readable mission summary" onClose={onClose}>
     {stale && <p className="changed-notice">This summary records the previous applied analysis. Edited inputs have not been analyzed.</p>}
-    <p>Uses the applied mission and up to two selected sites. Scientific JSON remains a separate export.</p>
+    <p>Includes selected sites that use the applied mission window.</p>
     <div className="guide-actions"><button className="primary-button" onClick={() => frame.current?.contentWindow?.print()}>Print / Save as PDF</button><button className="secondary-button" onClick={() => downloadHtml(html, `lumen-summary-${result.search_id}.html`)}>Download HTML summary</button><button className="text-button" onClick={() => downloadJson(result, `lumen-${result.search_id}.json`)}>Scientific JSON</button></div>
     <iframe className="mission-summary-frame" ref={frame} srcDoc={html} sandbox="allow-same-origin allow-modals" title="Printable applied mission summary" />
   </PlanningDialog>;

@@ -13,6 +13,7 @@ import type {
 } from "../lib/types";
 import { SceneBoundary } from "./SceneBoundary";
 import { SceneLabel } from "./SceneLabel";
+import { compareSiteLabel, compareSiteLetter } from "../lib/compare-sites";
 import {
   BLOCKED_COLOR, BODY_COLORS, COMPARE_COLORS, SUITABILITY_COLORS, SUITABILITY_LABELS,
   blockerAt, groundDirection, horizonAt, sampleIndexAt, suitabilityClass, type Body,
@@ -30,6 +31,8 @@ interface LayerOptions {
   sample?: TimeSample;
   /** Up to four candidate ids drawn in the compare colours (Okabe–Ito). */
   compare?: string[];
+  /** Keep the shared view framed on the comparison even as the active sites change with time. */
+  comparisonSites?: Candidate[];
   layer: MapLayer;
   mapCandidates: MapCandidate[];
   psr: PSRLayer | null;
@@ -428,7 +431,7 @@ function TerrainMesh({
               />
             </mesh>
             <SceneLabel
-              text={String(site.rank).padStart(2, "0")}
+              text={slot >= 0 ? compareSiteLetter(slot) : String(site.rank).padStart(2, "0")}
               selected={active}
               color={slot >= 0 ? ring : undefined}
               round
@@ -448,6 +451,18 @@ function TerrainMesh({
   );
 }
 
+function comparisonFrame(terrain: TerrainData, sites?: Candidate[]) {
+  if (!sites?.length) return { left: 0, top: 0, span: 600 };
+  const [xmin, ymin, xmax, ymax] = terrain.extent_m;
+  const x = sites.map(site => (site.x_m - xmin) / (xmax - xmin) * 600);
+  const y = sites.map(site => (ymax - site.y_m) / (ymax - ymin) * 600);
+  const left = Math.min(...x), right = Math.max(...x);
+  const top = Math.min(...y), bottom = Math.max(...y);
+  const span = Math.min(600, Math.max(60, Math.max(right - left, bottom - top) * 1.6));
+  const fit = (center: number) => Math.min(600 - span, Math.max(0, center - span / 2));
+  return { left: fit((left + right) / 2), top: fit((top + bottom) / 2), span };
+}
+
 export function FlatMap({
   terrain,
   candidates,
@@ -459,7 +474,8 @@ export function FlatMap({
   features,
   previewPoint,
   studyArea,
-  onPick,
+  compare = [],
+  comparisonSites,
 }: {
   terrain: TerrainData;
   candidates: Candidate[];
@@ -470,12 +486,14 @@ export function FlatMap({
   const values = terrain.elevations_m.filter((v): v is number => v != null),
     min = Math.min(...values),
     max = Math.max(...values);
+  const { left, top, span } = comparisonFrame(terrain, comparisonSites);
+  const scale = span / 600;
   return (
     <div className="flat-map">
       <svg
-        viewBox="0 0 600 600"
+        viewBox={`${left} ${top} ${span} ${span}`}
         aria-label={previewPoint ? "Local coarse terrain centered on the selected global point" : "Top-down terrain map with candidate locations"}
-        role="img"
+        role={comparisonSites?.length ? "group" : "img"}
       >
         {terrain.elevations_m.map((height, i) =>
           height == null ? null : (
@@ -539,32 +557,36 @@ export function FlatMap({
         })}
         {studyArea && <ellipse cx={(studyArea.x_m - xmin) / (xmax - xmin) * 600} cy={(ymax - studyArea.y_m) / (ymax - ymin) * 600} rx={studyArea.radius_m / (xmax - xmin) * 600} ry={studyArea.radius_m / (ymax - ymin) * 600} fill="none" stroke="#f1d49b" strokeWidth="3" />}
         {previewPoint && <g transform="translate(300 300)"><path d="M-10 0H10M0-10V10" stroke="#fff9d3" strokeWidth="3" /><text x="14" y="-12" fill="#fff9d3" fontSize="13">Selected point</text></g>}
-        {candidates.map((site) => (
-          <g
-            key={site.id}
-            transform={`translate(${((site.x_m - xmin) / (xmax - xmin)) * 600},${((ymax - site.y_m) / (ymax - ymin)) * 600})`}
-            className={`flat-marker ${selected === site.id ? "selected" : ""}`}
-            tabIndex={0}
-            role="button"
-            aria-label={`Inspect candidate ${site.rank}`}
-            onClick={() => onSelect(site.id)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onSelect(site.id);
-              }
-            }}
-          >
-            <circle r="14" />
-            <text textAnchor="middle" dy="5">
-              {site.rank}
-            </text>
-          </g>
-        ))}
-        <g stroke="#d4e4d5" fill="#e2ede3">
+        {candidates.map((site) => {
+          const slot = compare.indexOf(site.id);
+          const markerColor = slot >= 0 ? COMPARE_COLORS[slot] : undefined;
+          return (
+            <g
+              key={site.id}
+              transform={`translate(${((site.x_m - xmin) / (xmax - xmin)) * 600},${((ymax - site.y_m) / (ymax - ymin)) * 600}) scale(${scale})`}
+              className={`flat-marker ${selected === site.id ? "selected" : ""}`}
+              tabIndex={0}
+              role="button"
+              aria-label={`Inspect ${slot >= 0 ? compareSiteLabel(slot) : `candidate ${site.rank}`}`}
+              onClick={() => onSelect(site.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelect(site.id);
+                }
+              }}
+            >
+              <circle r="14" style={markerColor ? { stroke: markerColor, strokeWidth: 2.5 } : undefined} />
+              <text textAnchor="middle" dy="5">
+                {slot >= 0 ? compareSiteLetter(slot) : site.rank}
+              </text>
+            </g>
+          );
+        })}
+        <g transform={`translate(${left} ${top}) scale(${scale})`} stroke="#d4e4d5" fill="#e2ede3">
           <path d="M25 568v7h150v-7" fill="none" strokeWidth="2" />
           <text x="25" y="558" stroke="none" fontSize="12">
-            {Number(((xmax - xmin) / 4000).toPrecision(3))} km
+            {Number(((xmax - xmin) * scale / 4000).toPrecision(3))} km
           </text>
         </g>
       </svg>
@@ -587,6 +609,7 @@ export function TerrainScene({
   onPick,
   sample,
   compare,
+  comparisonSites,
 }: {
   terrain: TerrainData;
   candidates: Candidate[];
@@ -595,9 +618,10 @@ export function TerrainScene({
   mode: "terrain" | "map";
 } & LayerOptions) {
   const elevation = layer === "elevation";
+  const [xmin, ymin, xmax, ymax] = terrain.extent_m;
   const spanKm = Math.max(
-    terrain.extent_m[2] - terrain.extent_m[0],
-    terrain.extent_m[3] - terrain.extent_m[1],
+    xmax - xmin,
+    ymax - ymin,
   ) / 1000;
   const flat = (
     <FlatMap
@@ -611,20 +635,26 @@ export function TerrainScene({
       mapCandidates={mapCandidates}
       psr={psr}
       features={features}
+      compare={compare}
+      comparisonSites={comparisonSites}
     />
   );
   const legend = layer === "suitability" ? <SuitabilityLegend /> : null;
   if (mode === "map") return <>{flat}{legend}</>;
   const lightSite = candidates.find(site => site.id === selected) ?? candidates[0];
-  // In the time-aware evidence view, frame the selected site rather than the whole 200 km cap.
   const focusSite = sample ? candidates.find(site => site.id === selected) : undefined;
+  const sharedFrame = comparisonSites && comparisonSites.length > 1 ? comparisonFrame(terrain, comparisonSites) : null;
+  const focusPoint = sharedFrame ? {
+    x_m: xmin + (sharedFrame.left + sharedFrame.span / 2) / 600 * (xmax - xmin),
+    y_m: ymax - (sharedFrame.top + sharedFrame.span / 2) / 600 * (ymax - ymin),
+  } : focusSite;
+  const focusSpan = sharedFrame ? spanKm * sharedFrame.span / 600 : Math.min(spanKm, 40);
   let minimum = Infinity;
-  if (focusSite) for (const v of terrain.elevations_m) if (v != null && v < minimum) minimum = v;
-  const focus: [number, number, number] | undefined = focusSite
-    ? [focusSite.x_m / 1000, ((heightAt(terrain, focusSite.x_m, focusSite.y_m) - minimum) / 1000) * HEIGHT_SCALE, -focusSite.y_m / 1000]
+  if (focusPoint) for (const v of terrain.elevations_m) if (v != null && v < minimum) minimum = v;
+  const focus: [number, number, number] | undefined = focusPoint
+    ? [focusPoint.x_m / 1000, ((heightAt(terrain, focusPoint.x_m, focusPoint.y_m) - minimum) / 1000) * HEIGHT_SCALE, -focusPoint.y_m / 1000]
     : undefined;
-  // Framing a ~40 km neighbourhood: markers at 1.5× their patch size read well; the cap-wide view scales with extent.
-  const markerSize = focus ? 1.5 : undefined;
+  const markerSize = sharedFrame ? Math.max(.5, focusSpan * 1.5 / 40) : focus ? 1.5 : undefined;
   const sunSample = sample && lightSite?.timeline.length
     ? lightSite.timeline[sampleIndexAt(lightSite.timeline, sample.time_utc)] ?? sample
     : sample;
@@ -637,8 +667,8 @@ export function TerrainScene({
         dpr={[1, 1.7]}
         camera={{
           position: focus
-            ? [focus[0] + Math.min(spanKm, 40) * .45, focus[1] + Math.min(spanKm, 40) * .32, focus[2] + Math.min(spanKm, 40) * .5]
-            : [(terrain.extent_m[0] + terrain.extent_m[2]) / 2000 + spanKm * .7, spanKm * .65, -(terrain.extent_m[1] + terrain.extent_m[3]) / 2000 + spanKm * .8],
+            ? [focus[0] + focusSpan * .45, focus[1] + focusSpan * .32, focus[2] + focusSpan * .5]
+            : [(xmin + xmax) / 2000 + spanKm * .7, spanKm * .65, -(ymin + ymax) / 2000 + spanKm * .8],
           fov: 44,
           near: 0.1,
           far: Math.max(200, spanKm * 5),
@@ -682,7 +712,7 @@ export function TerrainScene({
         />
         <OrbitControls
           makeDefault
-          target={focus ?? [(terrain.extent_m[0] + terrain.extent_m[2]) / 2000, 2, -(terrain.extent_m[1] + terrain.extent_m[3]) / 2000]}
+          target={focus ?? [(xmin + xmax) / 2000, 2, -(ymin + ymax) / 2000]}
           minDistance={focus ? 1.5 : 6}
           maxDistance={Math.max(55, spanKm * 3)}
           maxPolarAngle={Math.PI / 2.05}

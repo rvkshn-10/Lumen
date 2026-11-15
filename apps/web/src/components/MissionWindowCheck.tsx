@@ -30,7 +30,7 @@ export function MissionWindowCheck({ rows, board, name, onInspect, example, synt
     ? board.map(row => ({ row, ...checkWindow(row, requirement, minimumHours, limits) }))
     : [], [board, limits, minimumHours, requirement, valid, validClearance]);
   const selected = new Set(rows.map(row => row.key));
-  const checks = boardChecks.filter(check => selected.has(check.row.key));
+  const checks = rows.flatMap(row => boardChecks.find(check => check.row.key === row.key) ?? []);
   const showRecovery = checks.some(check => check.available) && !checks.some(check => check.meets);
   const alternatives = boardChecks.filter(check => !selected.has(check.row.key) && check.meets);
   const anyUnknown = boardChecks.some(check => !check.available);

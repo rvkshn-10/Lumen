@@ -16,4 +16,7 @@ const request: SearchRequest = {
 export const demoComparison: ScenarioLink[] = [
   { id: "lola--27000--79500", label: "Site A", request },
   { id: "lola--29000--76500", label: "Site B", request },
+  { id: "lola--28500--81500", label: "Candidate 1", request },
+  { id: "lola--30000--82000", label: "Candidate 2", request },
+  { id: "lola--28500--80000", label: "Candidate 4", request },
 ];

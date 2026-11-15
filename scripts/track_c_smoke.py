@@ -12,8 +12,9 @@ from playwright.sync_api import expect, sync_playwright
 
 def check(page, url: str) -> list[dict]:
     page.goto(url)
-    page.get_by_role("button", name="Continue to mission").click()
-    page.get_by_role("button", name="Review mission", exact=True).click()
+    stages = page.get_by_role("navigation", name="Planning stages")
+    expect(stages.get_by_role("button", name="Compare", exact=True)).to_be_disabled()
+    page.get_by_role("button", name="Continue to mission", exact=True).click()
     with page.expect_response(
         lambda response: response.url.endswith("/api/v1/candidates/search"),
         timeout=135_000,
@@ -27,13 +28,23 @@ def check(page, url: str) -> list[dict]:
     expect(board).to_be_visible()
     sites = {site["id"]: site for site in result["candidates"]}
     assert len(sites) >= 2, "The demo window needs two eligible locations"
-    board.locator(".compare-management > summary").click()
-    scenario_rows = board.get_by_role("region", name="Scenarios", exact=True)
-    for checkbox in scenario_rows.get_by_role("checkbox").all():
-        checkbox.check()
 
     comparison = board.get_by_role("region", name="Comparison values", exact=True)
     expect(comparison).to_be_visible()
+    rankings = page.get_by_role("region", name="Site rankings", exact=True)
+    expect(rankings.get_by_role("listitem")).to_have_count(len(sites))
+    assert rankings.evaluate("""rankings => Boolean(
+        document.querySelector('.solar-generation').compareDocumentPosition(rankings)
+        & Node.DOCUMENT_POSITION_FOLLOWING
+    )""")
+    for site in result["candidates"][2:4]:
+        rankings.get_by_role(
+            "button", name=f"Add candidate {site['rank']} to comparison", exact=True
+        ).click()
+        expect(
+            comparison.locator(f'[data-metric="{site["id"]}:earth_visibility_fraction"]')
+        ).to_be_visible()
+
     records = comparison.locator("[data-metric]").evaluate_all(
         """(elements, start) => elements.map(element => ({
           metric: element.dataset.metric, raw: element.dataset.raw,
