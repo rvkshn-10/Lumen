@@ -398,7 +398,8 @@
 }
 
 @media print {
-  #top > :not(#explorer), #explorer > :not(.guide-stage), .guide-stage > :not(.scenario-board),
+  #top > :not(#explorer), #explorer > :not(.guide-stage):not(.planner-mission-workspace),
+  .planner-mission-workspace > :not(.guide-stage), .guide-stage > :not(.scenario-board),
   .scenario-board button, .scenario-board input, .scenario-board .compare-toolbar,
   .compare-share, .compare-management, .compare-timeline-panel, .compare-analysis-panel, .scenario-map,
   .compare-site-controls, .compare-scroll-hint, .site-rankings { display: none !important; }

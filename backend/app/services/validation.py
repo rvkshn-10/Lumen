@@ -15,6 +15,7 @@ from app.models import (
 from app.services.dataset import DataUnavailable, dataset
 from app.services.proximity import feature_catalog
 from app.services.repository import is_tiled, load_area, release_metadata
+from app.services.search_limits import public_limits
 from app.settings import settings
 
 DEFAULT_PREFERENCES = Preferences(
@@ -80,7 +81,15 @@ def _estimate_candidates(request: SearchRequest) -> int:
     return round(area_km2 / CANDIDATE_SPACING_KM**2)
 
 
-def validate_search(request: SearchRequest, *, point_only: bool = False) -> SearchValidationResponse:
+def hemisphere_candidate_count(request):
+    if request.region.selector_type == SelectorType.southern_hemisphere:
+        from app.services.hemisphere_survey import grid
+
+        return len(grid()[0])
+    return round(pi * request.region.search_radius_km**2 / .25)
+
+
+def validate_search(request: SearchRequest, *, point_only: bool = False, hemisphere: bool = False) -> SearchValidationResponse:
     region_assumptions: list[str] = []
     if request.region.selector_type == SelectorType.feature_radius:
         try:
@@ -102,7 +111,16 @@ def validate_search(request: SearchRequest, *, point_only: bool = False) -> Sear
         )
     if request.region.selector_type == SelectorType.polygon:
         raise SearchValidationError("Polygon selection is not supported in this MVP; use a circle.")
-    if request.region.center and request.region.center.latitude_deg > -87:
+    if hemisphere:
+        if request.region.selector_type not in (SelectorType.circle, SelectorType.southern_hemisphere) or (request.region.selector_type == SelectorType.circle and request.region.center is None):
+            raise SearchValidationError("Southern terrain searches require a circle.")
+        if request.region.center and request.region.center.latitude_deg > 0:
+            raise SearchValidationError("Choose a southern hemisphere center.")
+        if request.region.search_radius_km is not None and request.region.search_radius_km > public_limits()["maximum_radius_km"]:
+            raise SearchValidationError(f"Southern terrain searches allow up to {public_limits()['maximum_radius_km']} km radius.")
+        if request.hard_constraints.science_feature_ids or request.hard_constraints.maximum_distance_to_psr_km is not None:
+            raise SearchValidationError("PSR and feature-proximity constraints are unavailable for hemisphere terrain.")
+    if not hemisphere and request.region.center and request.region.center.latitude_deg > -87:
         raise SearchValidationError("Search centers must be in the lunar south-pole cap (87–90°S).")
     start = _as_utc(request.time_range.start_utc)
     end = _as_utc(request.time_range.end_utc)
@@ -120,12 +138,15 @@ def validate_search(request: SearchRequest, *, point_only: bool = False) -> Sear
         raise SearchValidationError("Mission dates must fall within the validated 2025–2035 range.")
 
     constraints = request.hard_constraints
-    if is_tiled(settings.data_root) and not point_only:
+    limits = public_limits()
+    if hemisphere and end-start > timedelta(days=7):
+        raise SearchValidationError("Southern terrain searches allow up to 7 days.")
+    if not hemisphere and is_tiled(settings.data_root) and not point_only:
         if request.region.selector_type == SelectorType.full_supported_region:
-            if start != datetime(2028, 10, 1, tzinfo=UTC) or end != datetime(2028, 10, 31, tzinfo=UTC):
+            if start != datetime.fromisoformat(limits["full_region_start_utc"]) or end != datetime.fromisoformat(limits["full_region_end_utc"]):
                 raise SearchValidationError("The full cap demo uses exactly October 1–31, 2028; choose a local circle for other dates.")
-        elif request.region.search_radius_km > 5 or end-start > timedelta(days=7):
-            raise SearchValidationError("Live cap searches allow up to 5 km radius and 7 days; use the fixed full-cap demo for broader analysis.")
+        elif request.region.search_radius_km > limits["maximum_radius_km"] or end-start > timedelta(days=limits["maximum_live_days"]):
+            raise SearchValidationError(f"Live cap searches allow up to {limits['maximum_radius_km']} km radius and {limits['maximum_live_days']} days; reduce the radius or shorten the window, or use the fixed full-cap demo for broader analysis.")
     if constraints.maximum_distance_to_psr_km is not None:
         try:
             _, arrays = ({}, {}) if is_tiled(settings.data_root) else dataset(settings.data_root)
@@ -180,5 +201,5 @@ def validate_search(request: SearchRequest, *, point_only: bool = False) -> Sear
         normalized_preferences=normalized,
         assumptions=assumptions,
         warnings=warnings,
-        estimated_candidate_count=_estimate_candidates(request),
+        estimated_candidate_count=hemisphere_candidate_count(request) if hemisphere else _estimate_candidates(request),
     )

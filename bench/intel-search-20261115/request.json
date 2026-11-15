@@ -1,0 +1,43 @@
+{
+  "region": {
+    "selector_type": "southern_hemisphere",
+    "input_text": null,
+    "resolved_feature_id": null,
+    "center": null,
+    "search_radius_km": null
+  },
+  "time_range": {
+    "start_utc": "2028-10-01T00:00:00Z",
+    "end_utc": "2028-10-08T00:00:00Z"
+  },
+  "hard_constraints": {
+    "maximum_slope_deg": null,
+    "maximum_roughness_m": null,
+    "minimum_elevation_m": null,
+    "maximum_elevation_m": null,
+    "minimum_illumination_fraction": null,
+    "minimum_continuous_sunlight_hours": null,
+    "maximum_continuous_darkness_hours": null,
+    "minimum_earth_visibility_fraction": null,
+    "minimum_continuous_communication_hours": null,
+    "maximum_continuous_blackout_hours": null,
+    "maximum_distance_to_psr_km": null,
+    "maximum_distance_to_science_feature_km": null,
+    "science_feature_ids": []
+  },
+  "preferences": {
+    "illumination": 0.4,
+    "earth_visibility": 0.4,
+    "terrain_safety": 0.2,
+    "science_proximity": 0.0
+  },
+  "dte_margin_deg": 2.0,
+  "power": {
+    "area_m2": 1.0,
+    "efficiency": 0.3,
+    "load_w": 150.0,
+    "capacity_wh": 2000.0,
+    "start_soc": 1.0
+  },
+  "scrub_time_utc": null
+}

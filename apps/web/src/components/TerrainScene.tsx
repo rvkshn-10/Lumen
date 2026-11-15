@@ -169,8 +169,8 @@ function heightAt(terrain: TerrainData, x: number, y: number) {
 }
 
 /** Scene-space direction (x east-ish, y up, z = −projected y) toward a body, with the terrain's height scale. */
-function sceneDirection(longitudeDeg: number, azimuthDeg: number, elevationDeg: number) {
-  const [gx, gy] = groundDirection(longitudeDeg, azimuthDeg);
+function sceneDirection(longitudeDeg: number, azimuthDeg: number, elevationDeg: number, crs?: string) {
+  const [gx, gy] = groundDirection(longitudeDeg, azimuthDeg, crs);
   const up = Math.tan((Math.max(-80, Math.min(80, elevationDeg)) * Math.PI) / 180) * HEIGHT_SCALE;
   return new THREE.Vector3(gx, up, -gy).normalize();
 }
@@ -181,7 +181,7 @@ function SunLight({ terrain, sample, longitudeDeg }: { terrain: TerrainData; sam
   const cx = (xmin + xmax) / 2000, cz = -(ymin + ymax) / 2000;
   const half = Math.max(xmax - xmin, ymax - ymin) / 2000 * 1.2;
   // Keep the light a hair above the ground plane so a grazing Sun still shades slopes.
-  const dir = sceneDirection(longitudeDeg, sample.sun_azimuth_deg, Math.max(.4, sample.sun_elevation_deg));
+  const dir = sceneDirection(longitudeDeg, sample.sun_azimuth_deg, Math.max(.4, sample.sun_elevation_deg), terrain.crs);
   const position = new THREE.Vector3(cx, 0, cz).add(dir.clone().multiplyScalar(half * 2));
   const target = useMemo(() => new THREE.Object3D(), []);
   target.position.set(cx, 0, cz);
@@ -210,11 +210,11 @@ function SightLines({ terrain, site, sample, base, markerSize }: { terrain: Terr
     const az = body === "sun" ? sample.sun_azimuth_deg : sample.earth_azimuth_deg;
     const el = body === "sun" ? sample.sun_elevation_deg : sample.earth_elevation_deg;
     const visible = body === "sun" ? sample.sun_visible : sample.earth_visible;
-    const dir = sceneDirection(site.longitude_deg_east, az, el);
+    const dir = sceneDirection(site.longitude_deg_east, az, el, terrain.crs);
     if (visible) return { body, visible, points: [origin, origin.clone().add(dir.multiplyScalar(spanKm * .32))], blocker: null as THREE.Vector3 | null, far: false };
     const ray = blockerAt(site.horizon, az);
     const distance = ray?.distance_m ?? spanKm * 300;
-    const [gx, gy] = groundDirection(site.longitude_deg_east, az);
+    const [gx, gy] = groundDirection(site.longitude_deg_east, az, terrain.crs);
     const bx = site.x_m + gx * distance, by = site.y_m + gy * distance;
     const inside = bx >= xmin && bx <= xmax && by >= ymin && by <= ymax;
     if (!inside) {

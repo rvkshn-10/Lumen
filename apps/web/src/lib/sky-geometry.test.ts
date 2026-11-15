@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  blockerAt, elevationExaggeration, formatDuration, horizonAt, nextChange, sampleIndexAt,
+  blockerAt, groundDirection, elevationExaggeration, formatDuration, horizonAt, nextChange, sampleIndexAt,
   skyDirection, skyEvents, steadyState, suitabilityClass, visibilitySegments,
 } from "./sky-geometry";
 import type { TimeSample } from "./types";
@@ -12,6 +12,17 @@ const sample = (i: number, sun: boolean, earth: boolean, sunAz = i * 10): TimeSa
 });
 
 describe("terrain-aware sky geometry", () => {
+  it("keeps local east/north mesh directions independent of the selected longitude", () => {
+    const crs = "Local azimuthal equidistant, east/north metres about selected center";
+    for (const longitude of [-150, 45, 120]) {
+      const north = groundDirection(longitude, 0, crs);
+      const east = groundDirection(longitude, 90, crs);
+      expect(north[0]).toBeCloseTo(0); expect(north[1]).toBeCloseTo(1);
+      expect(east[0]).toBeCloseTo(1); expect(east[1]).toBeCloseTo(0);
+    }
+    const polarNorth = groundDirection(90, 0);
+    expect(polarNorth[0]).toBeCloseTo(1); expect(polarNorth[1]).toBeCloseTo(0);
+  });
   it("uses the conservative adjacent-bin maximum, periodic across north (backend rule)", () => {
     const profile = Array.from({ length: 72 }, (_, i) => i / 10);
     expect(horizonAt(profile, 0)).toBe(0.1);

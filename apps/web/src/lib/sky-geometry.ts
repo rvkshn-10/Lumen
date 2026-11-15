@@ -166,8 +166,8 @@ export function sampleIndexAt(timeline: TimeSample[], timeUtc: string): number {
  * (south polar stereographic, lon_0 = 0: x = ρ·sin λ, y = ρ·cos λ).
  * Local north points away from the pole, local east toward increasing longitude.
  */
-export function groundDirection(longitudeDeg: number, azimuthDeg: number): [number, number] {
-  const lon = (longitudeDeg * Math.PI) / 180, az = (azimuthDeg * Math.PI) / 180;
+export function groundDirection(longitudeDeg: number, azimuthDeg: number, crs?: string): [number, number] {
+  const lon = ((crs?.startsWith("Local azimuthal equidistant") ? 0 : longitudeDeg) * Math.PI) / 180, az = (azimuthDeg * Math.PI) / 180;
   const east: [number, number] = [Math.cos(lon), -Math.sin(lon)];
   const north: [number, number] = [Math.sin(lon), Math.cos(lon)];
   return [Math.sin(az) * east[0] + Math.cos(az) * north[0], Math.sin(az) * east[1] + Math.cos(az) * north[1]];

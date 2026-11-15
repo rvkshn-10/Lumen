@@ -28,6 +28,13 @@ npm run dev
 Open [Lumen](http://localhost:5173). The API is at
 [http://localhost:8000/docs](http://localhost:8000/docs).
 
+For the Intel development build with background preparation and an experimental
+15 km radius (seven-day window), build the web app and run
+`./scripts/start_intel_local.ps1`, then open `http://localhost:8000`.
+Stable deployments retain the 5 km default. See [warm-up, cache behavior, measured
+Intel results and limitations](docs/search-warmup.md). Warm-up is not release
+qualification for larger search tiers.
+
 The small NASA-derived terrain bundle and Moon display assets are included.
 `prepare:all-data` installs the verified full polar cap, global coarse-ranking terrain
 and approximately 44 MB of pinned JPL kernels. `prepare:data` remains available for
@@ -243,3 +250,20 @@ up to seven days. This coarse ranking does not invent fine terrain assessments o
 screen the detailed mission's hard constraints. **Places to consider → View sites
 on 3D Moon** shows shortlisted and returned eligible locations, with marker
 selection and site inspection. See [local-area ranking](docs/local-area-ranking.md).
+
+## Search performance work
+
+See [the performance qualification guide](bench/README.md) for fixed benchmark
+scenarios, phase profiling, optional mapped tiles and mission-window caches, and
+the experimental compiled kernel. Public search limits remain gated at 5 km / 7
+days until the Intel and Mac qualification budgets pass.
+
+## Southern hemisphere detailed terrain
+
+Detailed local searches can use installed LOLA 256 ppd terrain throughout 0–90°S,
+with a 5 km radius and seven-day window. Coverage enables itself only after source
+verification. See [installation and scientific definitions](docs/hemisphere-detailed-search.md).
+
+Choose **Whole southern hemisphere · regional survey** to compare 827 regional
+locations across the south and refine the shortlist with dense local searches.
+See [survey coverage and resolution](docs/hemisphere-survey.md).

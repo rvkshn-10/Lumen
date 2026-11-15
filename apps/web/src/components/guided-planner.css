@@ -237,6 +237,7 @@
 @media (max-width: 650px) { .area-3d-preview { height: 420px; } .area-view-switch button { flex: 1; padding: 8px; } .polar-view-caption { font-size: 10px; } }
 .moon-loading { position: absolute; top: 70px; left: 20px; right: 20px; color: var(--text-primary); font-size: 13px; background: #101010da; padding: 10px; pointer-events: none; }
 .area-layout > div { min-width: 0; }
+.guide-stage[hidden] { display: none !important; }
 .area-3d-preview canvas, .terrain-3d-frame canvas { max-width: 100%; }
 
 .candidate-globe { height: 680px; margin: 16px 0; }
@@ -279,3 +280,25 @@
 .horizon-review-differences dl { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-block: 6px; }
 .horizon-review-differences dt { color: var(--text-secondary); font-size: 12px; }
 .horizon-review-differences dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Search scopes share the revamped sidebar's compact, monochrome controls. */
+.area-scope-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; max-width: 72rem; margin: 0 auto 1rem; }
+.area-scope-picker button { display: grid; gap: .2rem; text-align: left; padding: .8rem 1rem; border: 1px solid var(--line, #8884); border-radius: 14px; background: var(--surface, #8881); color: inherit; }
+.area-scope-picker button[aria-pressed="true"] { border-color: currentColor; background: var(--surface-raised, #8882); }
+.area-scope-picker button span { font-size: .78rem; opacity: .7; }
+.area-scope-picker button:disabled { opacity: .45; cursor: not-allowed; }
+
+.hemisphere-refinement { margin-block: 20px; padding: clamp(16px, 3vw, 24px); border: 1px solid var(--line); border-radius: 16px; background: var(--surface-raised); }
+.hemisphere-refinement h2 { margin: .4rem 0; font-size: clamp(1.2rem, 3vw, 1.6rem); }
+.hemisphere-refinement p { color: var(--text-secondary); max-width: 75ch; }
+
+.area-scope-explanation { max-width: 72rem; margin: 0 auto 1rem; }
+.area-setup:not(:has(.area-editor)) { grid-template-columns: 1fr 1fr; grid-template-areas: "view next"; }
+@media (max-width: 650px) {
+  .area-scope-picker { grid-template-columns: 1fr; }
+  .area-setup:not(:has(.area-editor)) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "view" "next"; gap: .6rem; }
+  .area-setup:not(:has(.area-editor)) .area-next { justify-items: stretch; }
+  .area-setup:not(:has(.area-editor)) .area-coverage-status { text-align: left; }
+}
+
+.preparation-state { margin: .5rem auto; max-width: 72rem; color: var(--text-secondary); font-size: .78rem; text-align: center; min-height: 1.4em; }

@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from app.services.dataset import DataUnavailable, dataset
-from app.services.terrain_store import ROW_COLUMNS, TerrainStore, digest
+from app.services.terrain_store import ROW_COLUMNS, SCALAR_COLUMNS, TerrainStore, digest
 
 
 def is_tiled(root: Path) -> bool:
@@ -19,7 +19,7 @@ def is_tiled(root: Path) -> bool:
 
 @lru_cache(maxsize=2)
 def store(root: Path) -> TerrainStore:
-    return TerrainStore(root, max_cache_bytes=int(os.getenv("LUMEN_TILE_CACHE_BYTES", "8388608")))
+    return TerrainStore(root, max_cache_bytes=int(os.getenv("LUMEN_TILE_CACHE_BYTES", "33554432")))
 
 
 def release_metadata(root: Path) -> dict:
@@ -51,16 +51,19 @@ def read_asset(root: Path, name: str) -> dict:
         raise DataUnavailable(f"Prepared layer unavailable: {name}") from exc
 
 
-def load_area(root: Path, region) -> tuple[dict, dict]:
+def load_area(root: Path, region, *, scalar_only: bool = False) -> tuple[dict, dict]:
     if not is_tiled(root):
         return dataset(root)
     terrain = store(root)
     metadata = release_metadata(root)
     if region.selector_type == "full_supported_region":
         tile_ids = [tile["id"] for tile in terrain.catalog()["tiles"]]
-        chunks = {key: [] for key in ROW_COLUMNS}
+        columns = SCALAR_COLUMNS if scalar_only else ROW_COLUMNS
+        chunks = {key: [] for key in columns}
         for tile_id in tile_ids:
-            arrays = terrain.load_tile(tile_id)
+            arrays = (
+                terrain.load_scalar_tile(tile_id) if scalar_only else terrain.load_tile(tile_id)
+            )
             for key, pieces in chunks.items():
                 pieces.append(arrays[key].copy())
         arrays = {key: np.concatenate(pieces) for key, pieces in chunks.items()}
@@ -94,41 +97,62 @@ def load_site(root: Path, site_id: str, neighbor_radius_m: float = 0) -> tuple[d
 
 
 def selected_metrics(
-    root: Path, metadata: dict, arrays: dict, indices, kernel_root: Path, start, end
-) -> tuple[dict, ...]:
+    root: Path,
+    metadata: dict,
+    arrays: dict,
+    indices,
+    kernel_root: Path,
+    start,
+    end,
+    *,
+    columnar: bool = False,
+):
     # Import lazily: the scientific engine also consumes this repository.
     from app.services.ephemeris import body_positions
-    from app.services.search import METRIC_KEYS, analyze_batch
-    from app.services.tile_metrics import cache_identity, load_tile_metrics
+    from app.services.metric_columns import MetricRows
+    from app.services.search import METRIC_KEYS, evaluate_metrics
+    from app.services.tile_metrics import cache_identity, load_tile_metrics, window_directory
 
     terrain = store(root)
-    wanted = {str(arrays["ids"][i]): j for j, i in enumerate(indices)}
-    rows = [None] * len(indices)
+    wanted_ids = arrays["ids"][indices]
+    order = np.argsort(wanted_ids, kind="stable")
+    ordered_ids = wanted_ids[order]
+    output = {key: np.full(len(indices), np.nan, dtype=np.float64) for key in METRIC_KEYS}
     exact_demo = (
         start.isoformat() == "2028-10-01T00:00:00+00:00"
         and end.isoformat() == "2028-10-31T00:00:00+00:00"
     )
-    if exact_demo:
+    directory = root / "demo-cache" if exact_demo else window_directory(root, start, end)
+    if directory.exists() or exact_demo:
         for tile_id in metadata["used_tile_ids"]:
-            tile = terrain.load_tile(tile_id)
+            tile_ids = terrain.load_ids(tile_id)
             tile_metadata = json.loads((root / tile_id / "metadata.json").read_text())
             identity = cache_identity(
                 tile_metadata, kernel_root, start, end, metadata["scoring_reference"]["id"]
             )
-            columns = load_tile_metrics(root / "demo-cache", tile_id, identity, tile["ids"])
+            columns = load_tile_metrics(directory, tile_id, identity, tile_ids)
             if columns is None:
+                if not exact_demo:
+                    continue
                 raise DataUnavailable(
                     "The exact full-region demo cache is unavailable; prepare it before retrying"
                 )
-            for i, site_id in enumerate(tile["ids"]):
-                position = wanted.get(str(site_id))
-                if position is not None:
-                    rows[position] = {key: float(columns[key][i]) for key in METRIC_KEYS}
-        if any(row is None for row in rows):
-            raise DataUnavailable("Exact demo cache did not account for every selected site")
-        return tuple(rows)
-    times, sun, earth = body_positions(kernel_root, start, end, 5)
-    result = []
-    for offset in range(0, len(indices), 32):
-        result.extend(analyze_batch(arrays, indices[offset : offset + 32], times, sun, earth))
-    return tuple(result)
+            if len(indices):
+                positions = np.searchsorted(ordered_ids, tile_ids)
+                present = positions < len(ordered_ids)
+                present &= ordered_ids[np.minimum(positions, len(ordered_ids) - 1)] == tile_ids
+                destinations = order[positions[present]]
+                for key in METRIC_KEYS:
+                    output[key][destinations] = columns[key][present]
+    missing = np.flatnonzero(np.isnan(output[METRIC_KEYS[0]]))
+    if exact_demo and len(missing):
+        raise DataUnavailable("Exact demo cache did not account for every selected site")
+    if len(missing):
+        times, sun, earth = body_positions(kernel_root, start, end, 5)
+        for offset in range(0, len(missing), 32):
+            positions = missing[offset : offset + 32]
+            computed = evaluate_metrics(arrays, np.asarray(indices)[positions], times, sun, earth)
+            for key in METRIC_KEYS:
+                output[key][positions] = [row[key] for row in computed]
+    rows = MetricRows(output)
+    return rows if columnar else tuple(rows)

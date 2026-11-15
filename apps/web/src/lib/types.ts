@@ -33,7 +33,7 @@ export interface RegionManifest {
 }
 export interface SearchRequest {
   region: {
-    selector_type: "circle" | "feature_radius" | "full_supported_region";
+    selector_type: "circle" | "feature_radius" | "full_supported_region" | "southern_hemisphere";
     input_text?: string;
     resolved_feature_id?: string;
     center?: { latitude_deg: number; longitude_deg_east: number };
@@ -119,6 +119,7 @@ export interface Candidate {
   dte?: DTEContact;
 }
 export interface SearchResponse {
+  terrain_data?: TerrainData;
   search_id: string;
   status: "complete" | "empty";
   request: SearchRequest;
@@ -309,6 +310,7 @@ export interface CuratedSite {
   blurb: string;
 }
 export interface TerrainData {
+  crs?: string;
   width: number;
   height: number;
   extent_m: [number, number, number, number];

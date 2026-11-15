@@ -1,5 +1,5 @@
 import type { CoverageCatalog } from "../lib/planning";
-import { constraintLabels } from "../lib/planning";
+import { constraintLabels, usesHemisphereTerrain } from "../lib/planning";
 import type { LunarFeature, SearchRequest } from "../lib/types";
 
 interface MissionFieldProps {
@@ -38,7 +38,7 @@ export function MissionDateFields({ request, catalog, onChange }: MissionFieldPr
       </div>
       <p className="field-hint">{fullRegion
         ? "Full-region searches use the prepared October 1–31, 2028 demonstration window."
-        : `Live detailed missions: up to ${limits.maximum_live_days} days. Dates are checked against the service’s advertised ephemeris range.`}</p>
+        : request.region.selector_type === "southern_hemisphere" ? `Survey the southern hemisphere over up to ${limits.maximum_live_days} days, then refine shortlisted areas locally.` : `Live detailed missions: up to ${limits.maximum_live_days} days. Dates are checked against the service’s advertised ephemeris range.`}</p>
       {fullRegion && <button type="button" className="secondary-button" onClick={() => setTimeRange({
         start_utc: limits.full_region_start_utc, end_utc: limits.full_region_end_utc,
       })}>Apply October 2028 demo window</button>}
@@ -49,6 +49,7 @@ export function MissionDateFields({ request, catalog, onChange }: MissionFieldPr
 type RequirementField = Exclude<keyof SearchRequest["hard_constraints"], "science_feature_ids">;
 
 export function MissionRequirementFields({ request, catalog, features, onChange }: MissionFieldProps & { features: LunarFeature[] }) {
+  const hemisphere = usesHemisphereTerrain(request);
   function setConstraint(field: RequirementField, value?: number) {
     const hard_constraints = { ...request.hard_constraints, [field]: value };
     if (value === undefined) delete hard_constraints[field];
@@ -63,8 +64,8 @@ export function MissionRequirementFields({ request, catalog, features, onChange 
           const field = key as RequirementField;
           const value = request.hard_constraints[field];
           const factor = key.endsWith("_fraction") ? 100 : 1;
-          const unavailable = key === "maximum_distance_to_psr_km" && !catalog.layers.psr_distance;
-          const missingFeature = key === "maximum_distance_to_science_feature_km" && !request.hard_constraints.science_feature_ids?.length;
+          const unavailable = (key === "maximum_distance_to_psr_km" && (hemisphere || !catalog.layers.psr_distance)) || (hemisphere && key === "maximum_distance_to_science_feature_km");
+          const missingFeature = !hemisphere && key === "maximum_distance_to_science_feature_km" && !request.hard_constraints.science_feature_ids?.length;
           const disabled = unavailable || missingFeature;
           return (
             <div className="field" key={key}>
@@ -81,7 +82,7 @@ export function MissionRequirementFields({ request, catalog, features, onChange 
               {disabled && value != null && <button type="button" className="text-button" onClick={() => setConstraint(field)}>
                 Remove unavailable requirement
               </button>}
-              {unavailable && <small>Unavailable: this verified dataset has no PSR-distance layer.</small>}
+              {unavailable && <small>Unavailable for the selected terrain coverage.</small>}
               {missingFeature && <small>Select an approved science feature below to enable this limit.</small>}
             </div>
           );
@@ -89,7 +90,7 @@ export function MissionRequirementFields({ request, catalog, features, onChange 
       </div>
       <label className="field">
         Science feature centers
-        <select multiple value={request.hard_constraints.science_feature_ids ?? []} onChange={event => onChange({
+        <select multiple disabled={hemisphere} value={request.hard_constraints.science_feature_ids ?? []} onChange={event => onChange({
           ...request,
           hard_constraints: {
             ...request.hard_constraints,
@@ -99,6 +100,7 @@ export function MissionRequirementFields({ request, catalog, features, onChange 
           {features.map(feature => <option key={feature.id} value={feature.id}>{feature.name}</option>)}
         </select>
       </label>
+      {hemisphere && <><p className="field-hint">PSR and named-feature proximity are unavailable in hemisphere searches. Imported requirements remain applied until you remove them.</p>{!!request.hard_constraints.science_feature_ids?.length && <button type="button" className="text-button" onClick={() => { const hard_constraints = { ...request.hard_constraints }; delete hard_constraints.science_feature_ids; delete hard_constraints.maximum_distance_to_science_feature_km; onChange({ ...request, hard_constraints }); }}>Remove unavailable feature requirements</button>}</>}
       <h3>Ranking preferences</h3>
       <p>Preferences change the score among eligible sites. They do not override required limits.</p>
       <div className="guide-fields">

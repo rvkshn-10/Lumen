@@ -684,6 +684,22 @@ def run_once(ctx, results, seed, sample, *, check_parity=True) -> Report:
     rep = Report()
     rng = np.random.default_rng(seed)
     suites = set(ctx.args.suites)
+    if "speed" in suites:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from bench.run import run
+
+        rep.add("speed", "machine baseline supplied", bool(ctx.args.speed_baseline))
+        speed = run(ctx.args.speed_scenarios, ctx.args.speed_url,
+                    ctx.args.speed_repeat, ctx.args.speed_baseline, budget=ctx.args.speed_budget)
+        output = Path(ctx.args.report) / "speed.json"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(speed, indent=2))
+        for name, row in speed["operations"].items():
+            rep.add("speed", name, row["status"] == "pass",
+                    detail=json.dumps(row))
+        rep.add("speed", "minimum 20 repetitions", ctx.args.speed_repeat >= 20)
+        rep.add("speed", "all tiers qualified", not speed["locked"],
+                detail="Locked scenarios: " + ", ".join(speed["locked"]))
     if "data" in suites:
         suite_data(ctx, rep)
     if "ephemeris" in suites:
@@ -756,6 +772,11 @@ def main(argv=None):
     ap.add_argument("--scene-dump", help="Track B: JSON of what the 3D scene draws (window.__lumenScene.dump())")
     ap.add_argument("--ui-dump", help="Track C: JSON of displayed numbers ([data-metric] elements)")
     ap.add_argument("--self-test", action="store_true", help="plant faults and confirm detection")
+    ap.add_argument("--speed-scenarios", default=str(ROOT / "scripts/bench/scenarios.json"))
+    ap.add_argument("--speed-url", default="http://127.0.0.1:8000")
+    ap.add_argument("--speed-repeat", type=int, default=20)
+    ap.add_argument("--speed-baseline")
+    ap.add_argument("--speed-budget", choices=["step6", "final"], default="final")
     args = ap.parse_args(argv)
     if args.cache is None:
         args.cache = sorted(glob.glob(str(ROOT / "data/cache/temporal/*.npz")))[:1]

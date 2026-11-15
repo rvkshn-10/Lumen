@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -10,19 +14,38 @@ from app.coverage_api import router as coverage_router
 from app.exploration_api import router as exploration_router
 from app.global_api import router as global_router
 from app.horizon_api import router as horizon_router
+from app.preparation_api import router as preparation_router
 from app.scene_api import router as scene_router
+from app.services import search_runtime
+from app.services.bounded_analysis import worker_environment
 from app.settings import settings
 from app.v2_api import router as v2_router
 
+
+@asynccontextmanager
+async def lifespan(app):
+    runtime = search_runtime.SearchRuntime(worker_environment(), enabled=os.getenv("LUMEN_BACKGROUND_PREPARATION", "1") == "1")
+    search_runtime.instance = runtime
+    try:
+        await runtime.start()
+        yield
+    finally:
+        await runtime.close()
+        search_runtime.instance = None
+
+
 app = FastAPI(
     title="Lumen API",
+    lifespan=lifespan,
     version="0.1.0",
     description=(
         "Prototype lunar south-pole comparison interfaces. Results are planning indicators, "
         "not flight-certified mission products."
     ),
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=1)
 app.include_router(router)
+app.include_router(preparation_router)
 app.include_router(exploration_router)
 app.include_router(global_router)
 app.include_router(coverage_router)

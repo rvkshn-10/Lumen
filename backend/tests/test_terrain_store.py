@@ -106,6 +106,29 @@ def test_stable_sites_scores_eviction_and_readonly_arrays(cap):
     assert store.trace()["resident_bytes"] <= 2 * 1024 * 1024
 
 
+def test_id_only_reads_match_verified_tiles_without_loading_horizons(cap):
+    root, _ = cap
+    store = TerrainStore(root)
+    ids = store.load_ids("tile-6-5")
+    assert not store.trace()["loaded_tile_ids"]
+    assert not ids.flags.writeable
+    np.testing.assert_array_equal(ids, store.load_tile("tile-6-5")["ids"])
+
+
+def test_scalar_tiles_share_the_resident_budget_and_match_full_rows(cap):
+    from app.services.terrain_store import SCALAR_COLUMNS
+
+    root, _ = cap
+    store = TerrainStore(root, max_cache_bytes=2 * 1024 * 1024)
+    scalar = store.load_scalar_tile("tile-6-5")
+    assert "horizons_deg" not in scalar and "blocker_distance_m" not in scalar
+    full = store.load_tile("tile-6-5")
+    for key in SCALAR_COLUMNS:
+        np.testing.assert_array_equal(scalar[key], full[key])
+        assert not scalar[key].flags.writeable
+    assert store.trace()["resident_bytes"] <= store.max_cache_bytes
+
+
 def test_missing_corrupt_tiles_and_bad_catalog_fail_closed(cap, tmp_path):
     root, _ = cap
     catalog = json.loads((root / "catalog.json").read_text())

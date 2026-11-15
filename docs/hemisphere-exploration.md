@@ -20,3 +20,9 @@ The latency requirement is now measured as successful average completion below
 30 seconds per search type. Requests are not cut off at 30 seconds. See
 [the orbital planner guide](orbital-planner.md) for current controls, data sources,
 installation, timing measurements, safety-watchdog behavior and verification.
+
+Detailed local searches now also support verified installed LOLA 256 ppd terrain
+throughout the southern hemisphere, within a 5 km radius and seven days. The
+coverage response advertises this capability only after integrity verification.
+See [hemisphere detailed search](hemisphere-detailed-search.md) for installation,
+metric definitions, local validation and current cold-start performance.

@@ -1,0 +1,14 @@
+{
+  "diagnostic_only": true,
+  "other_qa_overlapped": true,
+  "polar_local_15_km_7_days": {
+    "seconds": 7.976823,
+    "region_candidates": 2819,
+    "shortlist": 5
+  },
+  "fixed_full_cap_demo": {
+    "seconds": 21.8740631,
+    "region_candidates": 103996,
+    "shortlist": 5
+  }
+}

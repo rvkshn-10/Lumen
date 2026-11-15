@@ -14,6 +14,7 @@ from app.services.dataset import dataset
 from app.services.proximity import feature_catalog
 from app.services.repository import is_tiled, load_area, release_metadata, store
 from app.services.search import region_mask
+from app.services.search_limits import public_limits
 from app.services.terrain_store import digest
 from app.settings import settings
 
@@ -55,12 +56,7 @@ def catalog_for(root, fingerprint: str):
             "candidate_count": release["verification"]["verified_candidates"],
             "candidate_spacing_m": 500,
             "layers": {"psr_distance": False, "approved_features": True},
-            "public_limits": {
-                "maximum_radius_km": 5,
-                "maximum_live_days": 7,
-                "full_region_start_utc": "2028-10-01T00:00:00Z",
-                "full_region_end_utc": "2028-10-31T00:00:00Z",
-            },
+            "public_limits": public_limits(),
             "search_service": {"mode": "synchronous"},
         }
     metadata, arrays = dataset(root)
@@ -113,22 +109,32 @@ def catalog_for(root, fingerprint: str):
             "psr_distance": "distance_psr_km" in arrays,
             "approved_features": (root / "features.json").exists(),
         },
-        "public_limits": {
-            "maximum_radius_km": 5,
-            "maximum_live_days": 7,
-            "full_region_start_utc": "2028-10-01T00:00:00Z",
-            "full_region_end_utc": "2028-10-31T00:00:00Z",
-        },
+        "public_limits": public_limits(),
         "search_service": {"mode": "synchronous"},
     }
 
 
 def catalog():
+    from app.services.hemisphere_survey import ready as survey_ready
+    from app.services.hemisphere_terrain import ready
+
     if is_tiled(settings.data_root):
         metadata = release_metadata(settings.data_root)
-        return catalog_for(settings.data_root, metadata["catalog_sha256"])
-    metadata, _ = dataset(settings.data_root)
-    return catalog_for(settings.data_root, json.dumps(metadata, sort_keys=True))
+        result = catalog_for(settings.data_root, metadata["catalog_sha256"])
+    else:
+        metadata, _ = dataset(settings.data_root)
+        result = catalog_for(settings.data_root, json.dumps(metadata, sort_keys=True))
+    from app.services.search_runtime import instance
+
+    result = {**result, "public_limits": public_limits(), "search_service": {**result["search_service"], "background_preparation": bool(instance and instance.enabled)}}
+    # Reuse the worker's completed verification only for the exact current source/code epoch.
+    from app.services import worker_pool
+    if (instance and instance.verified_revision is not None
+            and worker_pool._process is not None and worker_pool._process.poll() is None
+            and instance.verified_revision == worker_pool.source_revision(instance.environment)):
+        return {**result, "hemisphere_detailed": True, "hemisphere_survey": instance.survey_ready}
+    detailed_ready = ready()
+    return {**result, "hemisphere_detailed": detailed_ready, "hemisphere_survey": detailed_ready and survey_ready()}
 
 
 @router.get("")
@@ -145,6 +151,15 @@ def get_catalog():
 def preview(region: RegionSelection):
     try:
         coverage = catalog()
+        if region.selector_type == SelectorType.southern_hemisphere:
+            from app.services.hemisphere_survey import VERSION, grid
+
+            if not coverage["hemisphere_survey"]:
+                raise HTTPException(503, "The whole-hemisphere survey is not prepared yet.")
+            return {"status":"inside","candidate_count":len(grid()[0]),
+                    "region":region.model_dump(mode="json"),"dataset_version":VERSION,
+                    "message":"Ranks a regional sample across the whole southern hemisphere, approximately 150 km apart. "
+                              "Slope and roughness use 118 m LOLA terrain; survey horizons use the 1.9 km global grid. Refine shortlisted areas with a 5 km local search."}
         if region.selector_type == SelectorType.feature_radius:
             feature = next(
                 (
@@ -170,6 +185,19 @@ def preview(region: RegionSelection):
                 end_utc=datetime(2028, 10, 2, tzinfo=UTC),
             ),
         )
+        if region.center and region.center.latitude_deg > -87 and coverage["hemisphere_detailed"]:
+            from app.services.hemisphere_terrain import VERSION, lattice
+
+            if not coverage["hemisphere_detailed"]:
+                raise HTTPException(503, "Hemisphere LOLA terrain is still being installed or could not be verified.")
+            if region.center.latitude_deg > 0 or region.search_radius_km > coverage["public_limits"]["maximum_radius_km"]:
+                raise HTTPException(422, f"Choose a southern circle with radius at most {coverage['public_limits']['maximum_radius_km']} km.")
+            count = len(lattice(region)[0])
+            crossing = region.center.latitude_deg + np.rad2deg(region.search_radius_km*1000/RADIUS) > 0
+            return {"status": "partial" if crossing else "inside", "candidate_count": count,
+                    "region": region.model_dump(mode="json"), "dataset_version": VERSION,
+                    "message": "Southern terrain candidates are generated from verified LOLA elevations. "
+                               "Only the southern intersection is ranked for circles crossing the equator."}
         if is_tiled(settings.data_root):
             count = (
                 coverage["candidate_count"]
@@ -179,7 +207,7 @@ def preview(region: RegionSelection):
         else:
             _, arrays = dataset(settings.data_root)
             count = int(region_mask(request, arrays).sum())
-        if region.center and region.center.latitude_deg > -87:
+        if region.center and region.center.latitude_deg > -87 and coverage["hemisphere_detailed"]:
             count = 0
         status = "inside"
         if not count:

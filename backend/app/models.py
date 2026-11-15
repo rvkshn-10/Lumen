@@ -12,6 +12,7 @@ class StrictModel(BaseModel):
 
 class SelectorType(StrEnum):
     full_supported_region = "full_supported_region"
+    southern_hemisphere = "southern_hemisphere"
     feature_radius = "feature_radius"
     circle = "circle"
     polygon = "polygon"
@@ -31,6 +32,8 @@ class RegionSelection(StrictModel):
 
     @model_validator(mode="after")
     def validate_spatial_selector(self) -> RegionSelection:
+        if self.selector_type == SelectorType.southern_hemisphere and (self.center is not None or self.search_radius_km is not None):
+            raise ValueError("The whole-hemisphere selector does not accept a center or radius.")
         if self.selector_type == SelectorType.circle and (
             self.center is None or self.search_radius_km is None
         ):

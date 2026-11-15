@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "machine": "LATITUDE5430",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "processor": "Intel64 Family 6 Model 154 Stepping 4, GenuineIntel",
+  "python": "3.12.14",
+  "utc": "2026-11-15T02:35:10.343961+00:00",
+  "seed": 20261114,
+  "scenarios_sha256": "f39a4483b46208f96e88f630d562f34e6c95e2a7c328e27b49c86638d5c90f92",
+  "repeat": 5,
+  "budget": "step6",
+  "operations": {
+    "detailed_5km_7days": {
+      "status": "pass",
+      "result_path": "data\\cache\\performance-reused-results\\d19324a6f647795a.json",
+      "seconds": [
+        4.9631658999715,
+        1.4795456000138074,
+        1.842147900024429,
+        1.4236391999293119,
+        1.559104699990712
+      ],
+      "p50_seconds": 1.559104699990712,
+      "p95_seconds": 4.9631658999715,
+      "completed": 5,
+      "budget_seconds": 30,
+      "max_wire_bytes": 688299,
+      "result_sha256": "de7fc4fd32413bb315291a8e9808b05b81262c546aad04b566ece9c77f8692ca",
+      "stable_results": true,
+      "phases": {
+        "validation": {
+          "p50_seconds": 0.01523,
+          "p95_seconds": 0.25805900000000004
+        },
+        "load_area": {
+          "p50_seconds": 0.009547,
+          "p95_seconds": 0.011009999999999999
+        },
+        "region_mask": {
+          "p50_seconds": 0.000221,
+          "p95_seconds": 0.000303
+        },
+        "terrain_mask": {
+          "p50_seconds": 0.000145,
+          "p95_seconds": 0.0005639999999999999
+        },
+        "body_positions": {
+          "p50_seconds": 4.9000000000000005e-05,
+          "p95_seconds": 0.251215
+        },
+        "cached_metrics": {
+          "p50_seconds": 0.722193,
+          "p95_seconds": 0.962757
+        },
+        "category_scores": {
+          "p50_seconds": 0.003727,
+          "p95_seconds": 0.006477999999999999
+        },
+        "sort_separation": {
+          "p50_seconds": 0.0005629999999999999,
+          "p95_seconds": 0.000766
+        },
+        "map_sample": {
+          "p50_seconds": 0.000714,
+          "p95_seconds": 0.001118
+        },
+        "shortlist_details": {
+          "p50_seconds": 0.23243799999999998,
+          "p95_seconds": 0.268553
+        },
+        "json_encoding": {
+          "p50_seconds": 0.020879,
+          "p95_seconds": 0.027546
+        }
+      }
+    },
+    "full_cap_precomputed": {
+      "status": "fail",
+      "result_path": "data\\cache\\performance-reused-results\\03ecfa0a2bc5a53e.json",
+      "seconds": [
+        16.842642500065267,
+        15.840650100028142,
+        15.437220999971032,
+        15.310492200078443,
+        15.93755529995542
+      ],
+      "p50_seconds": 15.840650100028142,
+      "p95_seconds": 16.842642500065267,
+      "completed": 5,
+      "budget_seconds": 1,
+      "max_wire_bytes": 3243241,
+      "result_sha256": "fe7f21a6b303791b6324b69c0ac11456a32b9c964b48562a75a17bdc0e9df4e7",
+      "stable_results": true,
+      "phases": {
+        "validation": {
+          "p50_seconds": 0.006226,
+          "p95_seconds": 0.010241
+        },
+        "load_area": {
+          "p50_seconds": 4.813085,
+          "p95_seconds": 5.15533
+        },
+        "region_mask": {
+          "p50_seconds": 0.000225,
+          "p95_seconds": 0.000317
+        },
+        "terrain_mask": {
+          "p50_seconds": 0.0012629999999999998,
+          "p95_seconds": 0.002992
+        },
+        "body_positions": {
+          "p50_seconds": 7.5e-05,
+          "p95_seconds": 1.163711
+        },
+        "cached_metrics": {
+          "p50_seconds": 4.67464,
+          "p95_seconds": 5.3263490000000004
+        },
+        "category_scores": {
+          "p50_seconds": 1.566796,
+          "p95_seconds": 1.741554
+        },
+        "sort_separation": {
+          "p50_seconds": 0.384854,
+          "p95_seconds": 0.41517899999999996
+        },
+        "map_sample": {
+          "p50_seconds": 0.45274400000000004,
+          "p95_seconds": 0.498303
+        },
+        "shortlist_details": {
+          "p50_seconds": 0.9866029999999999,
+          "p95_seconds": 1.151347
+        },
+        "json_encoding": {
+          "p50_seconds": 0.090996,
+          "p95_seconds": 0.093944
+        }
+      }
+    }
+  },
+  "locked": [
+    "detailed_15km_14days",
+    "mission_50km_7days",
+    "mission_50km_30days",
+    "regional_100km_30days",
+    "curated_precomputed"
+  ],
+  "passed": false,
+  "all_tiers_unlocked": false,
+  "qualified": false
+}

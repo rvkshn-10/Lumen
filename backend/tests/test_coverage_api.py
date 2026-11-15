@@ -10,6 +10,11 @@ client = TestClient(app)
 
 
 def bundle(monkeypatch):
+    from app.services import hemisphere_terrain
+
+    monkeypatch.setattr(hemisphere_terrain, "ready", lambda: False)
+    from app.services import hemisphere_survey
+    monkeypatch.setattr(hemisphere_survey, "ready", lambda: False)
     # Scientific grid has a missing pole; display terrain is deliberately absent.
     x, y = np.meshgrid(np.arange(-2000, 2001, 500), np.arange(-2000, 2001, 500))
     keep = (x != 0) | (y != 0)
@@ -65,6 +70,20 @@ def test_preview_distinguishes_inside_partial_outside_and_full(monkeypatch):
     assert preview(-89.954)["status"] == "inside"
     assert preview(-89.94)["status"] == "partial"
     assert preview(-80)["status"] == "outside"
+
+
+def test_hemisphere_preview_enabled_only_with_verified_source(monkeypatch):
+    from app.services import hemisphere_terrain
+
+    bundle(monkeypatch)
+    monkeypatch.setattr(hemisphere_terrain, "ready", lambda: True)
+    response = client.post("/api/v1/coverage/preview", json={
+        "selector_type": "circle", "center": {"latitude_deg": -35, "longitude_deg_east": 179.99},
+        "search_radius_km": 5})
+    assert response.status_code == 200
+    assert response.json()["status"] == "inside"
+    assert response.json()["candidate_count"] > 300
+    assert response.json()["dataset_version"] == hemisphere_terrain.VERSION
     full = client.post(
         "/api/v1/coverage/preview", json={"selector_type": "full_supported_region"}
     ).json()

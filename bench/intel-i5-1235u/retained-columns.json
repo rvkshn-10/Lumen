@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "machine": "LATITUDE5430",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "processor": "Intel64 Family 6 Model 154 Stepping 4, GenuineIntel",
+  "python": "3.12.14",
+  "utc": "2026-11-15T02:40:21.047619+00:00",
+  "seed": 20261114,
+  "scenarios_sha256": "f39a4483b46208f96e88f630d562f34e6c95e2a7c328e27b49c86638d5c90f92",
+  "repeat": 20,
+  "budget": "final",
+  "operations": {
+    "detailed_5km_7days": {
+      "status": "pass",
+      "result_path": "data\\cache\\performance-final-results\\d19324a6f647795a.json",
+      "seconds": [
+        5.857882900047116,
+        1.675491499947384,
+        1.2967562000267208,
+        1.5438560999464244,
+        1.3849315999541432,
+        1.622098199906759,
+        1.9900959000224248,
+        1.7756491999607533,
+        1.4993440000107512,
+        1.4518902999116108,
+        1.8341017999919131,
+        1.815972900018096,
+        1.7641566999955103,
+        1.8865436000050977,
+        1.8171375999227166,
+        1.631209300016053,
+        1.584911199985072,
+        1.5074922000057995,
+        1.2945024999789894,
+        1.057606799993664
+      ],
+      "p50_seconds": 1.626653749961406,
+      "p95_seconds": 1.9900959000224248,
+      "completed": 20,
+      "budget_seconds": 2,
+      "max_wire_bytes": 688299,
+      "result_sha256": "de7fc4fd32413bb315291a8e9808b05b81262c546aad04b566ece9c77f8692ca",
+      "stable_results": true,
+      "phases": {
+        "validation": {
+          "p50_seconds": 0.010686000000000001,
+          "p95_seconds": 0.021724
+        },
+        "load_area": {
+          "p50_seconds": 0.009258500000000001,
+          "p95_seconds": 0.012617000000000001
+        },
+        "region_mask": {
+          "p50_seconds": 0.000171,
+          "p95_seconds": 0.000311
+        },
+        "terrain_mask": {
+          "p50_seconds": 7.05e-05,
+          "p95_seconds": 0.000214
+        },
+        "body_positions": {
+          "p50_seconds": 2.2e-05,
+          "p95_seconds": 0.000153
+        },
+        "cached_metrics": {
+          "p50_seconds": 0.7532274999999999,
+          "p95_seconds": 0.9306570000000001
+        },
+        "category_scores": {
+          "p50_seconds": 0.0026284999999999998,
+          "p95_seconds": 0.005384000000000001
+        },
+        "sort_separation": {
+          "p50_seconds": 0.000519,
+          "p95_seconds": 0.000949
+        },
+        "map_sample": {
+          "p50_seconds": 0.0007525,
+          "p95_seconds": 0.0010229999999999998
+        },
+        "shortlist_details": {
+          "p50_seconds": 0.252972,
+          "p95_seconds": 0.358516
+        },
+        "json_encoding": {
+          "p50_seconds": 0.030721,
+          "p95_seconds": 0.038496999999999997
+        }
+      }
+    },
+    "full_cap_precomputed": {
+      "status": "fail",
+      "result_path": "data\\cache\\performance-final-results\\03ecfa0a2bc5a53e.json",
+      "seconds": [
+        14.380951200029813,
+        11.740595399984159,
+        22.412277800031006,
+        18.825766999972984,
+        21.61287720000837,
+        13.659261499997228,
+        15.397947899997234,
+        14.415205000084825,
+        24.007605299935676,
+        14.769267500028946,
+        12.86798529990483,
+        14.079387599951588,
+        11.880350600113161,
+        9.691916599986143,
+        11.537872400018387,
+        9.478253499954008,
+        12.08306889992673,
+        23.772414700011723,
+        11.064918800024316,
+        10.132027599960566
+      ],
+      "p50_seconds": 13.869324549974408,
+      "p95_seconds": 23.772414700011723,
+      "completed": 20,
+      "budget_seconds": 1,
+      "max_wire_bytes": 3243241,
+      "result_sha256": "fe7f21a6b303791b6324b69c0ac11456a32b9c964b48562a75a17bdc0e9df4e7",
+      "stable_results": true,
+      "phases": {
+        "validation": {
+          "p50_seconds": 0.009673000000000001,
+          "p95_seconds": 0.017492
+        },
+        "load_area": {
+          "p50_seconds": 0.250262,
+          "p95_seconds": 0.446547
+        },
+        "region_mask": {
+          "p50_seconds": 0.0001515,
+          "p95_seconds": 0.00041
+        },
+        "terrain_mask": {
+          "p50_seconds": 0.0005859999999999999,
+          "p95_seconds": 0.0011330000000000001
+        },
+        "body_positions": {
+          "p50_seconds": 3.15e-05,
+          "p95_seconds": 8.9e-05
+        },
+        "cached_metrics": {
+          "p50_seconds": 3.915457,
+          "p95_seconds": 7.144344
+        },
+        "category_scores": {
+          "p50_seconds": 2.143889,
+          "p95_seconds": 3.269353
+        },
+        "sort_separation": {
+          "p50_seconds": 0.5940275,
+          "p95_seconds": 1.2540239999999998
+        },
+        "map_sample": {
+          "p50_seconds": 0.6473355,
+          "p95_seconds": 1.280595
+        },
+        "shortlist_details": {
+          "p50_seconds": 1.667377,
+          "p95_seconds": 3.382278
+        },
+        "json_encoding": {
+          "p50_seconds": 0.153045,
+          "p95_seconds": 0.24087999999999998
+        }
+      }
+    }
+  },
+  "locked": [
+    "detailed_15km_14days",
+    "mission_50km_7days",
+    "mission_50km_30days",
+    "regional_100km_30days",
+    "curated_precomputed"
+  ],
+  "passed": false,
+  "all_tiers_unlocked": false,
+  "qualified": false
+}

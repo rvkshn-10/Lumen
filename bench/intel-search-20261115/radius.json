@@ -1,0 +1,113 @@
+{
+  "processor": "Intel64 Family 6 Model 154 Stepping 4, GenuineIntel",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "memory_bytes": 16849256448,
+  "development_only": true,
+  "latency_qualified": false,
+  "cases": [
+    {
+      "radius_km": 5,
+      "days": 7,
+      "mode": "cold_geometry",
+      "seconds": 9.669648100039922,
+      "peak_resident_mib": 234.44921875,
+      "count": 317,
+      "shortlist": 5,
+      "timings": {
+        "validation": 0.00011110003106296062,
+        "load_area": 4.09991480410099e-06,
+        "region_mask": 3.269989974796772e-05,
+        "terrain_mask": 0.00039760000072419643,
+        "body_positions": 0.06605220003984869,
+        "cached_metrics": 0.24012029997538775,
+        "category_scores": 0.0030765000265091658,
+        "sort_separation": 0.0004970000591129065,
+        "map_sample": 0.000237800064496696,
+        "shortlist_details": 0.08471329999156296,
+        "preparation_handoff": 2.400018274784088e-06
+      },
+      "result_path": "data/cache/intel-radius/1794731101895170100/radius-5-cold_geometry.json",
+      "exact_repeat_seconds": 0.44636719999834895,
+      "identical_repeat": true
+    },
+    {
+      "radius_km": 5,
+      "days": 7,
+      "mode": "prepared_geometry",
+      "preparation_seconds": 0.6332207000814378,
+      "seconds": 1.5372939999215305,
+      "peak_resident_mib": 226.109375,
+      "count": 317,
+      "shortlist": 5,
+      "timings": {
+        "validation": 4.7600013203918934e-05,
+        "load_area": 3.400025889277458e-06,
+        "region_mask": 1.2599979527294636e-05,
+        "terrain_mask": 1.9600032828748226e-05,
+        "body_positions": 0.061853099963627756,
+        "cached_metrics": 0.224889500066638,
+        "category_scores": 0.0007869000546634197,
+        "sort_separation": 0.00015089998487383127,
+        "map_sample": 0.00022909999825060368,
+        "shortlist_details": 0.07539720006752759,
+        "preparation_handoff": 1.300009898841381e-06
+      },
+      "result_path": "data/cache/intel-radius/1794731101895170100/radius-5-prepared_geometry.json",
+      "exact_repeat_seconds": 0.4448712000157684,
+      "identical_repeat": true
+    },
+    {
+      "radius_km": 15,
+      "days": 7,
+      "mode": "cold_geometry",
+      "seconds": 54.38036990002729,
+      "peak_resident_mib": 269.4921875,
+      "count": 2821,
+      "shortlist": 5,
+      "timings": {
+        "validation": 8.769996929913759e-05,
+        "load_area": 3.600027412176132e-06,
+        "region_mask": 1.079996582120657e-05,
+        "terrain_mask": 2.0600040443241596e-05,
+        "body_positions": 8.999952115118504e-06,
+        "cached_metrics": 2.4227543000597507,
+        "category_scores": 0.004774699918925762,
+        "sort_separation": 0.0011415000772103667,
+        "map_sample": 0.0021470000501722097,
+        "shortlist_details": 0.0871908999979496,
+        "preparation_handoff": 9.998911991715431e-07
+      },
+      "result_path": "data/cache/intel-radius/1794731101895170100/radius-15-cold_geometry.json",
+      "exact_repeat_seconds": 0.6516712999437004,
+      "identical_repeat": true
+    },
+    {
+      "radius_km": 15,
+      "days": 7,
+      "mode": "prepared_geometry",
+      "preparation_seconds": 0.5883558999048546,
+      "seconds": 3.5325156999751925,
+      "peak_resident_mib": 257.2734375,
+      "count": 2821,
+      "shortlist": 5,
+      "timings": {
+        "validation": 8.409994188696146e-05,
+        "load_area": 2.400018274784088e-06,
+        "region_mask": 1.4999997802078724e-05,
+        "terrain_mask": 2.8799986466765404e-05,
+        "body_positions": 8.09994526207447e-06,
+        "cached_metrics": 2.1931632000487298,
+        "category_scores": 0.004971900023519993,
+        "sort_separation": 0.0011523999273777008,
+        "map_sample": 0.0027963999891653657,
+        "shortlist_details": 0.11411610001232475,
+        "preparation_handoff": 1.9000144675374031e-06
+      },
+      "result_path": "data/cache/intel-radius/1794731101895170100/radius-15-prepared_geometry.json",
+      "exact_repeat_seconds": 0.5853609000332654,
+      "identical_repeat": true
+    }
+  ],
+  "startup_preparation_seconds": 21.38082909991499,
+  "scientific_revision": "cfe5484b79e63a0f1394803a5e6d9761690f6c9f936a67f91af46a5322edac76"
+}

@@ -1,5 +1,5 @@
 import type { CoverageCatalog } from "../lib/planning";
-import { appliedConstraints, presetNames, priorityName } from "../lib/planning";
+import { appliedConstraints, presetNames, priorityName, usesHemisphereTerrain } from "../lib/planning";
 import type { LunarFeature, SearchRequest } from "../lib/types";
 import { MISSION_PRESETS } from "../lib/missions";
 import { normalizePreferences } from "../lib/weights";
@@ -46,7 +46,7 @@ export function PlanningMission({ request, catalog, features, onChange, onOpenLi
           <summary>Requirements &amp; custom weights{limits.length > 0 && <span className="field-hint"> · {limits.length} set</span>}</summary>
           <p className="priority-readout">{Math.round(weights.illumination * 100)}% sunlight · {Math.round(weights.earth_visibility * 100)}% Earth view · {Math.round(weights.terrain_safety * 100)}% terrain · {Math.round(weights.science_proximity * 100)}% science proximity</p>
           <MissionRequirementFields request={request} catalog={catalog} features={features} onChange={onChange} />
-          <p className="field-hint">Slope and roughness use a 100 m baseline on 1 km grids. PSR distance indicates proximity to modeled permanent shadow.</p>
+          <p className="field-hint">{usesHemisphereTerrain(request) ? "Slope uses a 500 m central-difference baseline; roughness is plane-residual RMS over a 500 m footprint." : "Slope and roughness use a 100 m baseline on 1 km grids. PSR distance indicates proximity to modeled permanent shadow."}</p>
         </details>
         <MissionBrief value={request} catalog={catalog} features={features} onApply={onChange} />
         <button type="button" className="text-button" onClick={onOpenLibrary}>Saved missions</button>
