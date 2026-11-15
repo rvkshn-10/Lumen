@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Download NASA trajectories for historic lunar landers and cache derived paths.
 
 Every number written by this script comes from a NASA source. Nothing is
@@ -24,11 +23,12 @@ import re
 import sys
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 import spiceypy as spice
+from spiceypy.utils.exceptions import SpiceyError
 
 ROOT = Path(__file__).resolve().parents[1]
 KERNELS = ROOT / "data" / "raw" / "kernels"
@@ -98,7 +98,7 @@ def utc(et: float) -> str:
 
 def unix_ms(et: float) -> int:
     iso = spice.et2utc(et, "ISOC", 3)
-    return int(datetime.fromisoformat(iso).replace(tzinfo=timezone.utc).timestamp() * 1000)
+    return int(datetime.fromisoformat(iso).replace(tzinfo=UTC).timestamp() * 1000)
 
 
 def coverage(path: Path, body: int) -> list[tuple[float, float]]:
@@ -276,12 +276,13 @@ def main(only: list[str]) -> int:
         log(f"{key}: {mission['name']}")
         try:
             data = spk_mission(key, mission) if "naif_id" in mission else horizons_mission(key, mission)
-        except Exception as exc:  # report and continue; never write a partial or synthetic file
+        except (OSError, RuntimeError, ValueError, KeyError, IndexError, SpiceyError) as exc:
+            # Report and continue; never write a partial or synthetic file.
             failures += 1
             log(f"  FAILED: {exc}")
             continue
         payload = {"id": key, "name": mission["name"], "frame": "J2000 (ICRF), Earth-centered, kilometres",
-                   "generated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"), **data}
+                   "generated_utc": datetime.now(UTC).isoformat(timespec="seconds"), **data}
         (OUT / f"{key}.json").write_text(json.dumps(payload, separators=(",", ":")))
         points = sum(len(s["t_ms"]) for s in data["segments"])
         index[key] = {"name": mission["name"], "points": points, "descent_points": len(data["descent"]["t_ms"]),
