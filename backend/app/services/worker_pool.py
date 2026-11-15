@@ -1,17 +1,21 @@
 """One reusable, killable worker. Source revisions invalidate its scientific caches."""
 
 import atexit
+import hashlib
 import json
 import os
 import subprocess
 import sys
 from contextlib import suppress
 from pathlib import Path
+from threading import Lock
 
 import orjson
+import psutil
 
 _process = None
 _revision = None
+_write_lock = Lock()
 
 
 def source_revision(environment):
@@ -46,15 +50,26 @@ def source_revision(environment):
         paths.update(
             kernels / item["file"] for item in json.loads((kernels / "manifest.json").read_text())
         )
+    # Track every scientific code revision, prepared survey and global horizon source.
+    code_root = Path(__file__).resolve().parents[1]
+    code = hashlib.sha256()
+    for path in sorted(code_root.rglob("*.py")):
+        code.update(str(path.relative_to(code_root)).encode())
+        code.update(path.read_bytes())
+    global_root = Path(environment.get("LUMEN_GLOBAL_ROOT", str(code_root.parents[1] / "data/derived/global-preview-v1")))
+    paths.update([hemisphere / "survey/manifest.json", hemisphere / "survey/terrain.npz",
+                  global_root / "metadata.json", global_root / "elevation.npz"])
     stamps = []
     for path in sorted(paths):
         try:
             stat = path.stat()
-            stamps.append((str(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
+            stamps.append((str(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_ino,
+                           hashlib.sha256(path.read_bytes()).hexdigest() if path.suffix == ".json" else None))
         except FileNotFoundError:
             stamps.append((str(path), None))
     return (
         tuple(stamps),
+        code.hexdigest(),
         environment.get("LUMEN_TEMPORAL_KERNEL", "reference"),
         environment.get("LUMEN_TILE_CACHE_BYTES"),
         environment.get("LUMEN_MMAP_TILES", "0"),
@@ -68,8 +83,14 @@ def discard(process=None):
         _process = None
         _revision = None
     if target is not None:
+        # Windows venv launchers may own a separate Python child with the pipe handles.
+        with suppress(psutil.Error):
+            for child in psutil.Process(target.pid).children(recursive=True):
+                with suppress(psutil.Error):
+                    child.kill()
         if target.poll() is None:
-            target.kill()
+            with suppress(OSError):
+                target.kill()
         target.wait()
         for stream in (target.stdin, target.stdout, target.stderr):
             if stream is not None:
@@ -83,6 +104,11 @@ def acquire(environment):
     if _process is not None and (_process.poll() is not None or revision != _revision):
         discard()
     if _process is None:
+        environment = dict(environment)
+        environment["LUMEN_SCIENCE_REVISION"] = hashlib.sha256(orjson.dumps(revision)).hexdigest()
+        # Native libraries otherwise create many CPU threads for speculative preparation.
+        for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMBA_NUM_THREADS"):
+            environment[name] = "1"
         _process = subprocess.Popen(
             [sys.executable, "-m", "app.analysis_worker", "serve"],
             stdin=subprocess.PIPE,
@@ -95,9 +121,15 @@ def acquire(environment):
     return _process
 
 
-def exchange(process, operation, payload):
-    process.stdin.write(orjson.dumps({"operation": operation, "payload": payload}) + b"\n")
-    process.stdin.flush()
+def send(process, operation, payload=None):
+    with _write_lock:
+        process.stdin.write(orjson.dumps({"operation": operation, "payload": payload}) + b"\n")
+        process.stdin.flush()
+
+
+def exchange(process, operation, payload, sent=False):
+    if not sent:
+        send(process, operation, payload)
     output = process.stdout.readline()
     if not output:
         raise OSError("Analysis worker closed its output")

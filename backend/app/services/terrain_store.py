@@ -11,6 +11,7 @@ import json
 import os
 import re
 from collections import OrderedDict, deque
+from functools import lru_cache
 from pathlib import Path
 from threading import RLock
 
@@ -36,10 +37,22 @@ class UnknownSite(DataUnavailable):
 
 
 def digest(path: Path) -> str:
+    stat = path.stat()
+    return _digest(path, (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
+
+
+@lru_cache(maxsize=256)
+def _digest(path, stamps):
+    from app.services.preparation_control import checkpoint
+
     value = hashlib.sha256()
     with path.open("rb") as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
+            checkpoint()
             value.update(block)
+    stat = path.stat()
+    if stamps != (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns):
+        raise DataUnavailable("Scientific artifact changed during verification")
     return value.hexdigest()
 
 

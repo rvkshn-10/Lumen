@@ -8,16 +8,19 @@ import json
 import os
 import tempfile
 import zlib
+from collections import OrderedDict
 from pathlib import Path
+
+import orjson
 
 from app.settings import REPOSITORY_ROOT
 
-ROOT = REPOSITORY_ROOT / "data/cache/v2-results"
+ROOT = Path(os.getenv("LUMEN_RESULT_CACHE_ROOT", REPOSITORY_ROOT / "data/cache/v2-results"))
 MAX_BYTES = 64 * 1024 * 1024
 
 
 def cached_result(operation: str, request: str, sources: str, calculate, *, root: Path = ROOT):
-    key = hashlib.sha256(json.dumps(["v2-result-1", operation, request, sources]).encode()).hexdigest()
+    key = hashlib.sha256(json.dumps(["v2-result-2", os.getenv("LUMEN_SCIENCE_REVISION", "direct"), operation, request, sources, code_revision()]).encode()).hexdigest()
     path = root / f"{key}.json.gz"
     try:
         envelope = json.loads(gzip.decompress(path.read_bytes()))
@@ -46,3 +49,42 @@ def cached_result(operation: str, request: str, sources: str, calculate, *, root
         except OSError:
             pass  # Read-only hosting still returns freshly computed science.
     return result
+
+
+def code_revision():
+    root = Path(__file__).resolve().parents[1]
+    value = hashlib.sha256()
+    for path in sorted(root.rglob("*.py")):
+        value.update(str(path.relative_to(root)).encode())
+        value.update(path.read_bytes())
+    return value.hexdigest()
+
+
+def exact_key(operation, payload, revision):
+    return hashlib.sha256(orjson.dumps(
+        ["exact-search-v1", revision, operation, payload], option=orjson.OPT_SORT_KEYS
+    )).hexdigest()
+
+
+class ResultCache:
+    def __init__(self, max_bytes=64 * 1024 * 1024, max_entries=8):
+        self.max_bytes, self.max_entries = max_bytes, max_entries
+        self.entries = OrderedDict()
+        self.bytes = 0
+
+    def get(self, key):
+        if key not in self.entries:
+            return None
+        self.entries.move_to_end(key)
+        return orjson.loads(self.entries[key])
+
+    def put(self, key, response):
+        data = orjson.dumps(response)
+        if len(data) > self.max_bytes or self.max_entries < 1:
+            return
+        previous = self.entries.pop(key, None)
+        self.bytes -= len(previous) if previous else 0
+        while self.entries and (self.bytes + len(data) > self.max_bytes or len(self.entries) >= self.max_entries):
+            self.bytes -= len(self.entries.popitem(last=False)[1])
+        self.entries[key] = data
+        self.bytes += len(data)

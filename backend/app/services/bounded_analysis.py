@@ -19,7 +19,25 @@ ANALYSIS_SECONDS = 120.0  # Safety watchdog; the performance target is successfu
 _active = False
 
 
+def worker_environment():
+    environment = os.environ.copy()
+    environment["LUMEN_DATA_ROOT"] = str(settings.data_root)
+    environment["LUMEN_KERNEL_ROOT"] = str(settings.kernel_root)
+    environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[2]) + os.pathsep + environment.get("PYTHONPATH", "")
+    return environment
+
+
 async def bounded_analysis(operation: str, payload: dict, request: Request) -> dict:
+    from app.services.search_runtime import instance
+    if instance is not None:
+        try:
+            return await instance.foreground(operation, payload, request, _bounded_analysis)
+        except (OSError, ValueError, KeyError) as exc:
+            raise HTTPException(503, "Scientific preparation unavailable. Your mission is retained.") from exc
+    return await _bounded_analysis(operation, payload, request)
+
+
+async def _bounded_analysis(operation: str, payload: dict, request: Request) -> dict:
     global _active
     # Fail fast instead of allowing queue time to consume the caller's deadline.
     if _active:
@@ -33,20 +51,11 @@ async def bounded_analysis(operation: str, payload: dict, request: Request) -> d
     _active = True
     process = None
     communication = None
-    center = payload.get("region", {}).get("center") or {}
-    hemisphere_search = operation == "search" and (payload.get("region", {}).get("selector_type") == "southern_hemisphere" or center.get("latitude_deg", -90) > -87)
-    reuse = operation == "search" and os.getenv("LUMEN_REUSE_WORKER", "1" if hemisphere_search else "0") == "1"
+    reuse = operation == "search" and os.getenv("LUMEN_REUSE_WORKER", "1") == "1"
     successful = False
     try:
         async with asyncio.timeout(ANALYSIS_SECONDS):
-            environment = os.environ.copy()
-            environment["LUMEN_DATA_ROOT"] = str(settings.data_root)
-            environment["LUMEN_KERNEL_ROOT"] = str(settings.kernel_root)
-            environment["PYTHONPATH"] = (
-                str(Path(__file__).resolve().parents[2])
-                + os.pathsep
-                + environment.get("PYTHONPATH", "")
-            )
+            environment = worker_environment()
             if reuse:
                 process = worker_pool.acquire(environment)
                 communication = asyncio.create_task(
@@ -91,11 +100,8 @@ async def bounded_analysis(operation: str, payload: dict, request: Request) -> d
         raise HTTPException(503, "Analysis service unavailable. Your inputs are retained.") from exc
     finally:
         try:
-            if reuse and not successful:
+            if reuse and not successful or not reuse and process is not None and process.poll() is None:
                 await asyncio.to_thread(worker_pool.discard, process)
-            elif not reuse and process is not None and process.poll() is None:
-                process.kill()
-                await asyncio.to_thread(process.wait)
         finally:
             try:
                 if communication is not None:

@@ -124,6 +124,15 @@ def catalog():
     else:
         metadata, _ = dataset(settings.data_root)
         result = catalog_for(settings.data_root, json.dumps(metadata, sort_keys=True))
+    from app.services.search_runtime import instance
+
+    result = {**result, "search_service": {**result["search_service"], "background_preparation": bool(instance and instance.enabled)}}
+    # Reuse the worker's completed verification only for the exact current source/code epoch.
+    from app.services import worker_pool
+    if (instance and instance.verified_revision is not None
+            and worker_pool._process is not None and worker_pool._process.poll() is None
+            and instance.verified_revision == worker_pool.source_revision(instance.environment)):
+        return {**result, "hemisphere_detailed": True, "hemisphere_survey": instance.survey_ready}
     detailed_ready = ready()
     return {**result, "hemisphere_detailed": detailed_ready, "hemisphere_survey": detailed_ready and survey_ready()}
 

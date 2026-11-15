@@ -125,7 +125,44 @@ def lattice(region):
     return x[keep], y[keep], lat[keep], lon[keep]
 
 
+_partial = None  # At most one interrupted area, <=317 points under public limits.
+
+
 def derive(grids, lat, lon):
+    global _partial
+    from app.services.preparation_control import checkpoint
+
+    identity = (tuple(id(value) for value in grids.values()), lat.tobytes(), lon.tobytes())
+    if _partial is not None and _partial[0] == identity:
+        _, height, slope, roughness, profiles, blockers = _partial
+    else:
+        _partial = None
+        height, slope, roughness = terrain_metrics(grids, lat, lon)
+        profiles, blockers = [], []
+    _partial = identity, height, slope, roughness, profiles, blockers
+    distances = np.r_[np.arange(118, 20000, 118), np.arange(20000, 200000, 472), 200000]
+    azimuth = np.deg2rad(np.arange(0, 360, 5))[None, :, None]
+    angle = distances / RADIUS
+    for start in range(sum(len(row) for row in profiles), len(lat), 8):
+        checkpoint()
+        stop = min(start + 8, len(lat))
+        raylat, raylon = destination(
+            lat[start:stop, None, None], lon[start:stop, None, None], azimuth, distances
+        )
+        terrain = sample(grids, raylat, raylon)
+        elevations = np.rad2deg(np.arctan2(
+            (RADIUS + terrain) * np.cos(angle) - (RADIUS + height[start:stop, None, None] + 2),
+            (RADIUS + terrain) * np.sin(angle),
+        ))
+        j = np.argmax(elevations, axis=2)
+        profiles.append(np.take_along_axis(elevations, j[:, :, None], axis=2)[:, :, 0])
+        blockers.append(distances[j])
+        checkpoint()  # Completed batches survive interruption, including a matching foreground handoff.
+    _partial = None
+    return height, slope, roughness, np.concatenate(profiles), np.concatenate(blockers)
+
+
+def terrain_metrics(grids, lat, lon):
     height = sample(grids, lat, lon)
     offsets = np.array([(x, y) for y in (-250, 0, 250) for x in (-250, 0, 250)])
     dlat, dlon = destination(
@@ -142,26 +179,7 @@ def derive(grids, lat, lon):
     design = np.column_stack((offsets, np.ones(9)))
     fit = z @ np.linalg.pinv(design).T @ design.T
     roughness = np.sqrt(np.mean((z - fit) ** 2, axis=1))
-    distances = np.r_[np.arange(118, 20000, 118), np.arange(20000, 200000, 472), 200000]
-    azimuth = np.deg2rad(np.arange(0, 360, 5))[None, :, None]
-    angle = distances / RADIUS
-    profiles, blockers = [], []
-    for start in range(0, len(lat), 8):
-        stop = min(start + 8, len(lat))
-        raylat, raylon = destination(
-            lat[start:stop, None, None], lon[start:stop, None, None], azimuth, distances
-        )
-        terrain = sample(grids, raylat, raylon)
-        elevations = np.rad2deg(
-            np.arctan2(
-                (RADIUS + terrain) * np.cos(angle) - (RADIUS + height[start:stop, None, None] + 2),
-                (RADIUS + terrain) * np.sin(angle),
-            )
-        )
-        j = np.argmax(elevations, axis=2)
-        profiles.append(np.take_along_axis(elevations, j[:, :, None], axis=2)[:, :, 0])
-        blockers.append(distances[j])
-    return height, slope, roughness, np.concatenate(profiles), np.concatenate(blockers)
+    return height, slope, roughness
 
 
 def prepare(region):

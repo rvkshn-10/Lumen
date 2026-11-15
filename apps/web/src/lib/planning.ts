@@ -16,7 +16,7 @@ export interface CoverageCatalog {
   candidate_spacing_m: number;
   layers: { psr_distance: boolean; approved_features: boolean };
   public_limits: { maximum_radius_km: number; maximum_live_days: number; full_region_start_utc: string; full_region_end_utc: string };
-  search_service?: { mode: "synchronous" | "jobs" };
+  search_service?: { background_preparation?: boolean; mode: "synchronous" | "jobs" };
 }
 export interface CoverageOutcome {
   status: "inside" | "partial" | "outside";

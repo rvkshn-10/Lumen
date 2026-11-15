@@ -5,6 +5,7 @@ import type { CoverageCatalog, CoverageOutcome } from "../lib/planning";
 import { appliedConstraints, areaName, canonical, coverageLabel, priorityName, publicLimitErrors, refineSurveyRequest, usesHemisphereTerrain } from "../lib/planning";
 import { getCoverage, PlanningError, previewCoverage, runAnalysis } from "../lib/planning-api";
 import type { AnalysisState } from "../lib/planning-api";
+import { useSearchPreparation } from "../lib/use-search-preparation";
 import { DEFAULT_REQUEST, shiftWindow } from "../lib/missions";
 import { downloadJson, utcRange } from "../lib/format";
 import type { Appearance } from "../lib/appearance";
@@ -61,6 +62,7 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
   const inspectionController = useRef<AbortController | null>(null);
   const version = useRef(0);
   const regionKey = canonical(draft.region);
+  const preparation = useSearchPreparation(draft.region, busy);
 
   useEffect(() => {
     const abort = new AbortController(); setLoadError(null);
@@ -191,6 +193,7 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
     <div className={`guided-planner explorer-${currentStep === 1 ? "area" : currentStep === 2 ? "mission" : "comparison"}`} id="explorer">
       {shared.length > 0 && <SharedScenarioBoard links={shared} demo={shared === demoComparison} audience={audience} terrain={terrain} />}
       <div hidden={shared.length > 0} className="planner-mission-workspace">
+    {!busy && <p className={`preparation-state ${preparation.state}`} role="status" aria-live="polite" title={preparation.message}>{preparation.state === "preparing" ? "Preparing search data in the background · submit whenever you’re ready" : preparation.state === "ready" ? "Search data ready · mission calculations run on submission" : "Background preparation unavailable · you can submit normally"}</p>}
     {import.meta.env.VITE_LUMEN_MOCK === "1" && <p className="changed-notice" role="status">Mock mode · synthetic analysis and replay data</p>}
     {result && stale && <div className="changed-notice" role="status">These results and exports use the previous mission. Review and run your edits to update them.</div>}
     {loadError && <div className="guide-error" role="alert"><h2>Service waking up or coverage unavailable</h2><p>{loadError}</p><p>Your inputs are retained.</p><button className="secondary-button" onClick={() => setRefresh(value => value + 1)}>Retry loading coverage</button></div>}

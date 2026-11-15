@@ -307,3 +307,5 @@
   .area-setup:not(:has(.area-editor)) .area-next { justify-items: stretch; }
   .area-setup:not(:has(.area-editor)) .area-coverage-status { text-align: left; }
 }
+
+.preparation-state { margin: .5rem auto; max-width: 72rem; color: var(--text-secondary); font-size: .78rem; text-align: center; min-height: 1.4em; }

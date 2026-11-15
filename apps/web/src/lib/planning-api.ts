@@ -37,6 +37,12 @@ export async function runAnalysis(request: SearchRequest, catalog: CoverageCatal
     const { mockAnalysis } = await import("./scenario-mock");
     return mockAnalysis(request);
   }
+  if (catalog.search_service?.background_preparation) {
+    // Speculative handoff is outside the foreground watchdog, and never required.
+    try {
+      await fetch(`${BASE}/search/preparation/yield`, { method: "POST", signal: AbortSignal.any([signal, AbortSignal.timeout(750)]) });
+    } catch { if (signal.aborted) throw new DOMException("Canceled", "AbortError"); }
+  }
   try {
     return await withinSearchDeadline(signal, boundedSignal => runAnalysisRequest(request, catalog, boundedSignal, onState));
   } catch (error) {
