@@ -26,7 +26,7 @@ function powerTicks(peak: number) {
 
 export function SolarGeneration({ rows, name, start, end }: {
   rows: Scenario[];
-  name: (row: Scenario) => string;
+  name: (row: Scenario, index: number) => string;
   start: number;
   end: number;
 }) {
@@ -36,7 +36,8 @@ export function SolarGeneration({ rows, name, start, end }: {
   const { traces, samples, ticks } = useMemo(() => {
     const samples = new Set<number>();
     let peak = 0;
-    const traces = rows.map(row => {
+    const names = rows.map(name);
+    const traces = rows.map((row, index) => {
       const power = row.site.power;
       const segments = solarSegments(
         power?.series, Date.parse(row.request.time_range.start_utc), Date.parse(row.request.time_range.end_utc),
@@ -47,11 +48,12 @@ export function SolarGeneration({ rows, name, start, end }: {
           peak = Math.max(peak, point.watts);
         }
       }
-      const repeated = rows.some(other => other.key !== row.key && name(other) === name(row));
-      const label = repeated ? `${name(row)} · ${fullTime.format(Date.parse(row.request.time_range.start_utc))}` : name(row);
+      const label = names[index];
+      const repeated = names.some((other, position) => position !== index && other === label);
+      const displayLabel = repeated ? `${label} · ${fullTime.format(Date.parse(row.request.time_range.start_utc))}` : label;
       const panel = power?.assumptions;
       const settings = panel ? `${tickWatts.format(panel.area_m2)} m², ${tickWatts.format(panel.efficiency * 100)}% efficiency` : "";
-      return { key: row.key, label, segments, settings };
+      return { key: row.key, label: displayLabel, segments, settings };
     });
     return { traces, samples: Array.from(samples).sort((a, b) => a - b), ticks: powerTicks(peak).reverse() };
   }, [name, rows]);

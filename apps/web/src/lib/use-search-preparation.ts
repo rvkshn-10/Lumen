@@ -4,17 +4,17 @@ import type { SearchRequest } from "./types";
 const BASE = `${import.meta.env.VITE_API_BASE_URL ?? "/api/v1"}/search/preparation`;
 export type PreparationState = { state: "preparing" | "ready" | "unavailable"; message?: string; id?: string };
 
-export function speculativeRegion(region: SearchRequest["region"]) {
+export function speculativeRegion(region: SearchRequest["region"], maximumRadius = 5) {
   if (region.selector_type === "southern_hemisphere") return region;
   const center = region.center, radius = region.search_radius_km;
   return center && Number.isFinite(center.latitude_deg) && center.latitude_deg > -87 && center.latitude_deg <= 0
     && Number.isFinite(center.longitude_deg_east) && center.longitude_deg_east >= -180 && center.longitude_deg_east < 180
-    && radius != null && Number.isFinite(radius) && radius > 0 && radius <= 5 ? region : null;
+    && radius != null && Number.isFinite(radius) && radius > 0 && radius <= maximumRadius ? region : null;
 }
 
-export function useSearchPreparation(region: SearchRequest["region"], busy: boolean) {
+export function useSearchPreparation(region: SearchRequest["region"], busy: boolean, maximumRadius = 5) {
   const [state, setState] = useState<PreparationState>({ state: "preparing" });
-  const key = JSON.stringify(speculativeRegion(region));
+  const key = JSON.stringify(speculativeRegion(region, maximumRadius));
   useEffect(() => {
     if (busy || import.meta.env.VITE_LUMEN_MOCK === "1") return;
     const abort = new AbortController();

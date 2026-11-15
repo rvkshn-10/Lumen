@@ -126,7 +126,7 @@ def catalog():
         result = catalog_for(settings.data_root, json.dumps(metadata, sort_keys=True))
     from app.services.search_runtime import instance
 
-    result = {**result, "search_service": {**result["search_service"], "background_preparation": bool(instance and instance.enabled)}}
+    result = {**result, "public_limits": public_limits(), "search_service": {**result["search_service"], "background_preparation": bool(instance and instance.enabled)}}
     # Reuse the worker's completed verification only for the exact current source/code epoch.
     from app.services import worker_pool
     if (instance and instance.verified_revision is not None
@@ -190,8 +190,8 @@ def preview(region: RegionSelection):
 
             if not coverage["hemisphere_detailed"]:
                 raise HTTPException(503, "Hemisphere LOLA terrain is still being installed or could not be verified.")
-            if region.center.latitude_deg > 0 or region.search_radius_km > 5:
-                raise HTTPException(422, "Choose a southern circle with radius at most 5 km.")
+            if region.center.latitude_deg > 0 or region.search_radius_km > coverage["public_limits"]["maximum_radius_km"]:
+                raise HTTPException(422, f"Choose a southern circle with radius at most {coverage['public_limits']['maximum_radius_km']} km.")
             count = len(lattice(region)[0])
             crossing = region.center.latitude_deg + np.rad2deg(region.search_radius_km*1000/RADIUS) > 0
             return {"status": "partial" if crossing else "inside", "candidate_count": count,

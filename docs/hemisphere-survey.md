@@ -25,7 +25,7 @@ integration independently of the scientific checks described below. Screenshots
 and its machine-readable report are written to `data/cache/hemisphere-ui/`.
 Desktop (1440 px) and mobile (390 px) checks passed: scope selection, truthful
 survey review, refinement outside advanced controls, retained dates, no horizontal
-overflow and no page errors. The frontend suite passed 85 tests and the production
+overflow and no page errors. The frontend suite passed 88 tests and the production
 build passed after integration.
 
 This is a regional survey, not an exhaustive ranking of every 500 m location.
@@ -66,7 +66,7 @@ Site inspection, shifted windows and exports use the survey geometry.
 
 ## GitHub UI integration
 
-The local integration branch merges GitHub `main` through `b900c3b` (solar generation
+The local integration branch merges GitHub `main` through `8248d62` (solar generation
 comparison and consistent appearance). The masthead, page layouts, appearance
 settings, mission fields and comparison board come from that version. Hemisphere
 scope controls use its monochrome theme and stack at mobile widths. The main
@@ -86,3 +86,7 @@ skipped). Frontend tests and TypeScript/production build passed.
 
 The survey is enabled locally. Hosted deployment also needs the installed
 hemisphere data directory and survey subdirectory; this work does not deploy it.
+
+Background preparation and the Intel-only 15 km development mode are documented
+in [search-warmup.md](search-warmup.md). The survey remains a regional sample;
+larger local circles retain the same 500 m lattice and seven-day window.

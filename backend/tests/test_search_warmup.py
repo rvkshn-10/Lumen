@@ -26,7 +26,7 @@ def runtime(monkeypatch):
     revision = ["source-v1"]
     monkeypatch.setattr(worker_pool, "source_revision", lambda env: revision[0])
     monkeypatch.setattr(worker_pool, "acquire", lambda env: process)
-    monkeypatch.setattr(worker_pool, "discard", lambda *args: calls.append("discard"))
+    monkeypatch.setattr(worker_pool, "discard", lambda *args, **kwargs: calls.append("discard"))
     def send(process, operation, payload=None):
         if operation == "cancel_prepare":
             canceled.set()
@@ -150,7 +150,7 @@ def test_background_resource_failures_leave_foreground_available(runtime, monkey
     else:
         monkeypatch.setattr(worker_pool, "exchange", lambda *args: b"")
     # Fake discard must unblock the fake exchange just as killing a real process closes its pipe.
-    monkeypatch.setattr(worker_pool, "discard", lambda *args: runtime.release.set())
+    monkeypatch.setattr(worker_pool, "discard", lambda *args, **kwargs: runtime.release.set())
 
     async def exercise():
         manager = runtime.manager
@@ -207,7 +207,8 @@ def test_interrupted_geometry_resumes_completed_batches_with_identical_output(mo
     interrupt[0] = False
     preparation_control.cancel.clear()
     resumed = terrain.derive({}, lat, lon)
-    assert batches == [8, 5]  # No completed horizon batch was recalculated at handoff.
+    assert batches[0] == 1  # Speculative work yields after a single candidate.
+    assert sum(batches) == len(lat)  # No completed horizon batch was recalculated.
     for expected, actual in zip(baseline, resumed, strict=True):
         np.testing.assert_array_equal(expected, actual)
     assert terrain._partial is None
@@ -264,3 +265,59 @@ def test_last_foreground_disconnect_cancels_work_and_shutdown_clears_tasks(runti
         await manager.close()
         assert manager.background is None and manager.monitor.done()
     asyncio.run(exercise())
+
+
+def test_real_worker_initializes_native_libraries_without_stalling_control_reader(tmp_path):
+    import concurrent.futures
+
+    from app.services.bounded_analysis import worker_environment
+    environment = worker_environment()
+    environment.update(LUMEN_DATA_ROOT=str(tmp_path), LUMEN_KERNEL_ROOT=str(tmp_path),
+                       LUMEN_HEMISPHERE_ROOT=str(tmp_path), LUMEN_GLOBAL_ROOT=str(tmp_path))
+    # No terrain is read: this exercises real native imports and the persistent control protocol.
+    worker_pool.discard()
+    process = worker_pool.acquire(environment)
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(worker_pool.exchange, process, "unknown", {})
+        try:
+            response = orjson.loads(future.result(timeout=20))
+            assert response["status"] == 503
+        finally:
+            worker_pool.discard()
+    assert process.poll() is not None
+
+
+def test_intel_development_radius_is_explicit_and_does_not_extend_dates(monkeypatch):
+    from app.models import SearchRequest
+    from app.services.search_limits import public_limits
+    from app.services.validation import SearchValidationError, validate_search
+    payload = {"region": {"selector_type": "circle", "center": {"latitude_deg": -35, "longitude_deg_east": 0}, "search_radius_km": 15},
+               "time_range": {"start_utc": "2028-10-01T00:00:00Z", "end_utc": "2028-10-08T00:00:00Z"}}
+    monkeypatch.delenv("LUMEN_MAXIMUM_RADIUS_KM", raising=False)
+    assert public_limits()["maximum_radius_km"] == 5
+    with pytest.raises(SearchValidationError):
+        validate_search(SearchRequest.model_validate(payload), hemisphere=True)
+    monkeypatch.setenv("LUMEN_MAXIMUM_RADIUS_KM", "15")
+    assert validate_search(SearchRequest.model_validate(payload), hemisphere=True).valid
+    payload["region"]["search_radius_km"] = 16
+    with pytest.raises(SearchValidationError):
+        validate_search(SearchRequest.model_validate(payload), hemisphere=True)
+    payload["region"]["search_radius_km"] = 15
+    payload["time_range"]["end_utc"] = "2028-10-09T00:00:00Z"
+    with pytest.raises(SearchValidationError):
+        validate_search(SearchRequest.model_validate(payload), hemisphere=True)
+    monkeypatch.setenv("LUMEN_MAXIMUM_RADIUS_KM", "50")
+    with pytest.raises(ValueError):
+        public_limits()
+
+
+def test_fifteen_kilometre_lattice_contains_five_kilometre_coordinates_exactly():
+    from app.models import RegionSelection
+    region = RegionSelection(selector_type="circle", center={"latitude_deg": -35, "longitude_deg_east": 0}, search_radius_km=5)
+    small = terrain.lattice(region)
+    region.search_radius_km = 15
+    large = terrain.lattice(region)
+    assert len(large[0]) == 2821
+    points = {(x, y): (lat, lon) for x, y, lat, lon in zip(*large, strict=True)}
+    for x, y, lat, lon in zip(*small, strict=True):
+        assert points[x, y] == (lat, lon)

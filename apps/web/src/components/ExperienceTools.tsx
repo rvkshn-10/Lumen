@@ -11,9 +11,9 @@ import { CONNECTING_RIDGE_ID, CraterInspection } from "./CraterInspection";
 import type { LunarFeature } from "../lib/types";
 
 const tour = [
-  ["Choose an area", "Pick a site on the Moon or enter coordinates. Select a prepared polar area for detailed terrain and visibility results."],
-  ["Set the mission", "Choose dates and a ranking priority, then review your mission and find candidate sites."],
-  ["Compare sites", "Select sites to compare. Duplicate a scenario to try another date."],
+  ["Choose an area", "Pick the center of your search on the Moon or enter its coordinates. Detailed comparisons use the prepared south-pole region."],
+  ["Set the mission", "Choose your dates and priorities, then click Find candidate sites."],
+  ["Compare sites", "Choose a site for each slot at the top. Add sites from the ranked shortlist or the map below."],
 ];
 export function ExperienceTools({ appearance, onAppearance, audience, onAudience, candidateCount }: {
   appearance: Appearance; onAppearance: (value: Appearance) => void;

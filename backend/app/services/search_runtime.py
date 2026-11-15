@@ -103,14 +103,14 @@ class SearchRuntime:
         except (OSError, ValueError, TimeoutError, MemoryError, psutil.Error):
             job.update(state="unavailable", message="Preparation unavailable. You can submit normally.")
             if process is not None:
-                await asyncio.to_thread(worker_pool.discard, process)
+                await asyncio.to_thread(worker_pool.discard, process, close=False)
         finally:
             if communication:
-                if not communication.done():
-                    if process is not None:
-                        await asyncio.to_thread(worker_pool.discard, process)
-                    communication.cancel()
+                if not communication.done() and process is not None:
+                    await asyncio.to_thread(worker_pool.discard, process, close=False)
                 await asyncio.gather(communication, return_exceptions=True)
+                if process is not None and process.poll() is not None:
+                    worker_pool.close_streams(process)
             if self.background is asyncio.current_task():
                 self.background = None
                 self.background_process = None
@@ -132,7 +132,7 @@ class SearchRuntime:
             await asyncio.wait_for(asyncio.shield(task), HANDOFF_SECONDS)
         except TimeoutError:
             if process is not None:
-                await asyncio.to_thread(worker_pool.discard, process)
+                await asyncio.to_thread(worker_pool.discard, process, close=False)
             await asyncio.gather(task, return_exceptions=True)
 
     async def refresh_revision(self):

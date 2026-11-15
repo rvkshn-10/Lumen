@@ -21,7 +21,6 @@ export type Alternative = ContractAlternative & { site_id?: string };
 export type ScenarioResult = SearchResponse & { alternatives?: Alternative[] };
 export type Audience = "Public" | "Educator" | "Planner";
 export const MAX_SCENARIOS = 8;
-export const COMPARE_LIMIT = 4;
 export const SITE_COLORS = COMPARE_COLORS;
 export const HOUR_MS = 3_600_000;
 

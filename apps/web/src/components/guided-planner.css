@@ -101,6 +101,7 @@
   letter-spacing: -.05em;
 }
 .guide-display-heading p { color: var(--text-secondary); font-size: clamp(.95rem, 2vw, 1.18rem); }
+.guide-display-heading > p { margin: 0; max-width: 36rem; }
 .guide-area-stage { padding-top: clamp(32px, 5.7vw, 72px); }
 .guide-area-stage .guide-display-heading { margin-bottom: clamp(26px, 4vw, 44px); }
 .guide-stage-tools { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -126,6 +127,8 @@
 .guide-mission-stage .primary-button { min-height: 44px; }
 .guide-mission-stage .secondary-button { border-color: var(--line); min-height: 44px; }
 .guide-mission-stage > .guide-actions { justify-content: space-between; border-top: 1px solid var(--line); padding-top: 22px; }
+.mission-search-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; }
+.mission-search-actions .text-button { min-height: 44px; }
 .guide-mission-form > .mission-priority { margin-block: 34px 22px; }
 .guide-mission-form > .mission-priority select { width: min(100%, 24rem); }
 .guide-mission-form > .mission-priority strong { margin-bottom: 3px; }
@@ -174,16 +177,6 @@
 .analysis-status.failed, .analysis-status.expired, .analysis-status.outside { background: var(--surface-raised); border-color: var(--line-strong); }
 .analysis-status.queued, .analysis-status.queue_full, .analysis-status.waking { background: var(--surface-raised); border-color: var(--line-strong); }
 .applied-mission-tools .guide-actions { margin: 8px 0 0; }
-.guided-planner .candidate-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-.compact-candidate-content { padding: 22px; }
-.compact-candidate-content h3 { font-size: 18px; font-weight: 500; margin: 14px 0 24px; overflow-wrap: anywhere; }
-.primary-metrics { display: flex; flex-direction: column; gap: 15px; margin: 0 0 24px; }
-.primary-metrics > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.primary-metrics dt { color: var(--text-secondary); font-size: 12px; }
-.primary-metrics dd { margin: 0; font-size: 20px; font-variant-numeric: tabular-nums; }
-.reveal-candidates { margin: 22px 0; }
-.site-takeaway { border-left: 3px solid var(--text-primary); background: var(--surface-raised); padding: 18px 24px; margin-top: 26px; line-height: 1.7; }
-.site-takeaway h3 { margin-top: 0; }
 .planning-dialog { width: min(1160px, calc(100vw - 40px)); max-width: none; max-height: 92dvh; padding: 28px; color: var(--text-primary); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: auto; overscroll-behavior: contain; }
 .planning-dialog::backdrop { background: #000a; }
 .planning-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 18px; }
@@ -202,13 +195,13 @@
 .evidence-terrain .scene-wrapper { height: 100%; }
 .mission-summary-frame { border: 1px solid var(--line); width: 100%; height: 60vh; min-height: 380px; margin-top: 24px; background: white; }
 .guided-planner .changed-notice { margin-bottom: 24px; padding: 15px 18px; line-height: 1.7; border: 1px solid var(--line-strong); background: var(--surface-raised); border-radius: 8px; }
-@media (max-width: 850px) { .area-layout { grid-template-columns: 1fr 1fr; gap: 20px; } .guided-planner .candidate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 850px) { .area-layout { grid-template-columns: 1fr 1fr; gap: 20px; } }
 @media (max-width: 650px) {
   .guide-stage { padding-top: 18px; }
   .guide-stage-heading { align-items: flex-start; flex-direction: column; gap: 10px; margin-bottom: 14px; }
   .guide-display-heading { margin-bottom: 32px; }
   .guide-area-stage, .guide-mission-stage, .guide-compare-stage { padding-top: 38px; }
-  .area-layout, .guide-fields, .guided-planner .candidate-grid { grid-template-columns: 1fr; }
+  .area-layout, .guide-fields { grid-template-columns: 1fr; }
   .area-layout { gap: 18px; }
   .planning-dialog { width: calc(100vw - 20px); padding: 16px; max-height: 95dvh; }
   .planning-dialog-header { align-items: flex-start; }

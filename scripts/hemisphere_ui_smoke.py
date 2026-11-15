@@ -22,9 +22,7 @@ def inspect_local(page, width, local_result):
     page.get_by_role("button", name="Find candidate sites", exact=True).click()
     expect(page.get_by_role("region", name="Refine survey results")).to_have_count(0, timeout=30000)
     expect(page.get_by_role("heading", name="Compare lunar sites", exact=True)).to_be_visible()
-    details = page.locator(".guide-stage:not([hidden]) details.advanced-mission").first
-    details.locator(":scope > summary").click()
-    details.get_by_role("button", name="Inspect site 01", exact=True).click()
+    page.locator(".site-rankings").get_by_role("button", name="Inspect site 01", exact=True).click()
     dialog = page.get_by_role("dialog")
     expect(dialog).to_contain_text("500 m central-difference baseline")
     dialog.get_by_role("tab", name="Terrain & sky", exact=True).click()
@@ -119,6 +117,10 @@ def main():
             expect(panel).to_be_visible(timeout=30000)
             assert not panel.locator("xpath=ancestor::details").count()
             expect(page.get_by_role("heading", name="Estimated solar generation", exact=True)).to_be_visible()
+            for rank in (3, 4):
+                page.get_by_role("button", name=f"Add candidate {rank} to comparison", exact=True).click()
+            expect(page.locator(".compare-site-slot select")).to_have_count(4)
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
             page.screenshot(path=str(OUTPUT / f"results-{width}.png"), full_page=True)
             page.emulate_media(media="print")
             expect(page.locator(".scenario-board").first).to_be_visible()
@@ -149,7 +151,7 @@ def main():
             page.get_by_role("navigation", name="Planning stages").get_by_role("button", name="Area", exact=True).click()
             expect(scope).to_be_visible()
             assert not errors, errors
-            checks.append({"width": width, "github_masthead": True, "appearance": True, "solar_generation": True, "print_comparison": True, "local_terrain_mesh": True, "demo_navigation": True, "scope_selection": True, "survey_review": True,
+            checks.append({"width": width, "github_masthead": True, "four_site_comparison": True, "appearance": True, "solar_generation": True, "print_comparison": True, "local_terrain_mesh": True, "demo_navigation": True, "scope_selection": True, "survey_review": True,
                            "visible_refinement": True, "dates_retained": True,
                            "local_selection_retained": True, "unavailable_survey_disabled": True,
                            "page_errors": errors})

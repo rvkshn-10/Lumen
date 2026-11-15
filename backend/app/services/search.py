@@ -281,10 +281,13 @@ def cached_metrics(
 def temporal_cache_path(
     data_root: Path, artifact_fingerprint: str, kernel_hashes: tuple[str, ...], start, end
 ) -> tuple[Path, str]:
+    from app.services.result_cache import code_revision
+
     key = hashlib.sha256(
         json.dumps(
             {
                 "version": TEMPORAL_CACHE_VERSION,
+                "code_revision": code_revision(),
                 "artifacts": artifact_fingerprint,
                 "kernels": kernel_hashes,
                 "start": start.isoformat(),

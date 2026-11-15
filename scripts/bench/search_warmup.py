@@ -27,6 +27,7 @@ class Connected:
 async def prepared(runtime):
     async with asyncio.timeout(195):
         while runtime.background is not None:
+            runtime.status()  # Model the browser renewing its active preparation lease.
             await asyncio.sleep(0.1)
     if runtime.status()["state"] != "ready":
         raise RuntimeError(runtime.status())
@@ -39,7 +40,7 @@ def scientific(result):
 async def main():
     output = ROOT / "data/cache/warmup-benchmark" / str(time.time_ns())
     output.mkdir(parents=True)
-    survey = json.loads((ROOT / "data/cache/hemisphere-survey/search.json").read_text(encoding="utf-8"))["request"]
+    survey = json.loads((ROOT / "bench/intel-search-20261115/request.json").read_text(encoding="utf-8"))
     local = {**survey, "region": {"selector_type": "circle", "center": {
         "latitude_deg": -80, "longitude_deg_east": 90}, "search_radius_km": 1},
         "time_range": {"start_utc": "2028-10-01T00:00:00Z", "end_utc": "2028-10-02T00:00:00Z"}}

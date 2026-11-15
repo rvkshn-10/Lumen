@@ -1,6 +1,9 @@
 # Search performance qualification
 
-The public limits remain **5 km / 7 days**. No larger tier is qualified. The
+The stable public limits remain **5 km / 7 days**. No larger tier is release-qualified.
+The Intel-only development launcher explicitly enables 15 km / seven days; see
+[measured warm-up and radius results](../docs/search-warmup.md). This opt-in does
+not claim P95 qualification and has no Mac prerequisite. The
 reference NumPy kernel is still the default. This change supplies instrumentation,
 response optimizations, optional mapped tile derivatives, exact multi-window
 precomputation, an experimental compiled/coarse kernel, and speed gates. It does

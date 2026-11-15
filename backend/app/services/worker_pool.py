@@ -59,11 +59,12 @@ def source_revision(environment):
     global_root = Path(environment.get("LUMEN_GLOBAL_ROOT", str(code_root.parents[1] / "data/derived/global-preview-v1")))
     paths.update([hemisphere / "survey/manifest.json", hemisphere / "survey/terrain.npz",
                   global_root / "metadata.json", global_root / "elevation.npz"])
+    from app.services.terrain_store import artifact_stamp
+
     stamps = []
     for path in sorted(paths):
         try:
-            stat = path.stat()
-            stamps.append((str(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_ino,
+            stamps.append((str(path), *artifact_stamp(path),
                            hashlib.sha256(path.read_bytes()).hexdigest() if path.suffix == ".json" else None))
         except FileNotFoundError:
             stamps.append((str(path), None))
@@ -71,12 +72,13 @@ def source_revision(environment):
         tuple(stamps),
         code.hexdigest(),
         environment.get("LUMEN_TEMPORAL_KERNEL", "reference"),
+        environment.get("LUMEN_MAXIMUM_RADIUS_KM", "5"),
         environment.get("LUMEN_TILE_CACHE_BYTES"),
         environment.get("LUMEN_MMAP_TILES", "0"),
     )
 
 
-def discard(process=None):
+def discard(process=None, *, close=True):
     global _process, _revision
     target = process if process is not None else _process
     if target is _process:
@@ -92,10 +94,16 @@ def discard(process=None):
             with suppress(OSError):
                 target.kill()
         target.wait()
-        for stream in (target.stdin, target.stdout, target.stderr):
-            if stream is not None:
-                with suppress(OSError):
-                    stream.close()
+        if close:
+            close_streams(target)
+
+
+def close_streams(process):
+    for name in ("stdin", "stdout", "stderr"):
+        stream = getattr(process, name, None)
+        if stream is not None:
+            with suppress(OSError, ValueError):
+                stream.close()
 
 
 def acquire(environment):

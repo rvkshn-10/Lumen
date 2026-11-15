@@ -24,11 +24,11 @@ def main():
                        "geometry": {"type": "cap", "extent_m": [-100000, -100000, 100000, 100000], "radius_m": 91000},
                        "excluded_locations": [], "candidate_count": 104000, "candidate_spacing_m": 500,
                        "layers": {"psr_distance": False, "approved_features": True},
-                       "public_limits": {"maximum_radius_km": 5, "maximum_live_days": 7,
+                       "public_limits": {"maximum_radius_km": 15, "maximum_live_days": 7,
                                          "full_region_start_utc": "2028-10-01T00:00:00Z", "full_region_end_utc": "2028-10-31T00:00:00Z"},
                        "search_service": {"mode": "synchronous"}, "hemisphere_detailed": True, "hemisphere_survey": True}
 
-            def route_api(route, posted=posted, deleted=deleted, state=state, catalog=catalog):
+            def route_api(route, request, *, posted=posted, deleted=deleted, state=state, catalog=catalog):
                 path = route.request.url.split("/api/v1")[-1]
                 if path.startswith("/search/preparation"):
                     if route.request.method == "POST":
@@ -61,10 +61,10 @@ def main():
             for latitude in ("-35", "-36", "-37"):
                 page.get_by_label("Latitude °S (negative)", exact=True).fill(latitude)
             page.get_by_label("Longitude °E", exact=True).fill("90")
-            page.get_by_label("Search radius (km)", exact=True).fill("1")
+            page.get_by_label("Search radius (km)", exact=True).fill("15")
             expect(status).to_contain_text("Search data ready", timeout=10000)
             locals_ = [region for region in posted if region["selector_type"] != "southern_hemisphere"]
-            assert len(locals_) == 1 and locals_[0]["center"]["latitude_deg"] == -37, posted
+            assert len(locals_) == 1 and locals_[0]["center"]["latitude_deg"] == -37 and locals_[0]["search_radius_km"] == 15, posted
             assert deleted, "Superseded preparation lease was not canceled"
             state["value"] = "unavailable"
             expect(status).to_contain_text("unavailable", timeout=10000)

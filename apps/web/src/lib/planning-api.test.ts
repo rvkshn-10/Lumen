@@ -5,6 +5,17 @@ import { DEFAULT_REQUEST } from "./missions";
 const catalog = { search_service: { mode: "jobs" } } as CoverageCatalog;
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 describe("analysis job adapter", () => {
+  it.each([false, true])("hands off optional preparation before submitting, even when handoff fails (%s)", async fail => {
+    const result = { search_id: "exact-result" };
+    const fetch = vi.fn();
+    if (fail) fetch.mockRejectedValueOnce(new TypeError("Preparation disconnected"));
+    else fetch.mockResolvedValueOnce(Response.json({ state: "ready" }));
+    fetch.mockResolvedValueOnce(Response.json(result));
+    vi.stubGlobal("fetch", fetch);
+    const service = { ...catalog, search_service: { mode: "synchronous" as const, background_preparation: true } };
+    expect(await runAnalysis(DEFAULT_REQUEST, service, new AbortController().signal, () => {})).toEqual(result);
+    expect(fetch.mock.calls.map(call => call[0])).toEqual(["/api/v1/search/preparation/yield", "/api/v1/candidates/search"]);
+  });
   it("reports server states and returns only the completed result", async () => {
     vi.useFakeTimers();
     const result = { search_id: "applied" };

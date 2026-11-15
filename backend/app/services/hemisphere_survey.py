@@ -13,7 +13,7 @@ import numpy as np
 
 from app.services.dataset import DataUnavailable
 from app.services.hemisphere_terrain import RADIUS, ROOT, source
-from app.services.terrain_store import digest
+from app.services.terrain_store import artifact_stamp, digest
 
 VERSION = "southern-hemisphere-survey-5deg-v2"
 
@@ -70,7 +70,7 @@ def load():
         metadata, _ = source()
         directory = ROOT / "survey"
         stamps = tuple(
-            (p.stat().st_size, p.stat().st_mtime_ns, p.stat().st_ctime_ns)
+            artifact_stamp(p)
             for p in (directory / "manifest.json", directory / "terrain.npz")
         )
         from app.global_api import global_grid

@@ -116,8 +116,8 @@ def validate_search(request: SearchRequest, *, point_only: bool = False, hemisph
             raise SearchValidationError("Southern terrain searches require a circle.")
         if request.region.center and request.region.center.latitude_deg > 0:
             raise SearchValidationError("Choose a southern hemisphere center.")
-        if request.region.search_radius_km is not None and request.region.search_radius_km > 5:
-            raise SearchValidationError("Southern terrain searches allow up to 5 km radius.")
+        if request.region.search_radius_km is not None and request.region.search_radius_km > public_limits()["maximum_radius_km"]:
+            raise SearchValidationError(f"Southern terrain searches allow up to {public_limits()['maximum_radius_km']} km radius.")
         if request.hard_constraints.science_feature_ids or request.hard_constraints.maximum_distance_to_psr_km is not None:
             raise SearchValidationError("PSR and feature-proximity constraints are unavailable for hemisphere terrain.")
     if not hemisphere and request.region.center and request.region.center.latitude_deg > -87:

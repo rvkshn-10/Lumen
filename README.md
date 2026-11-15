@@ -28,6 +28,13 @@ npm run dev
 Open [Lumen](http://localhost:5173). The API is at
 [http://localhost:8000/docs](http://localhost:8000/docs).
 
+For the Intel development build with background preparation and an experimental
+15 km radius (seven-day window), build the web app and run
+`./scripts/start_intel_local.ps1`, then open `http://localhost:8000`.
+Stable deployments retain the 5 km default. See [warm-up, cache behavior, measured
+Intel results and limitations](docs/search-warmup.md). Warm-up is not release
+qualification for larger search tiers.
+
 The small NASA-derived terrain bundle and Moon display assets are included.
 `prepare:all-data` installs the verified full polar cap, global coarse-ranking terrain
 and approximately 44 MB of pinned JPL kernels. `prepare:data` remains available for

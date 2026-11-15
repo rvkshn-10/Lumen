@@ -50,14 +50,14 @@ describe("guided planning contract", () => {
     expect(publicLimitErrors(survey, catalog)).toEqual([]);
     expect(publicLimitErrors({ ...survey, time_range: { ...survey.time_range, end_utc: "2028-10-09T00:00:00Z" } }, catalog)).toHaveLength(1);
   });
-  it("exports applied evidence, escapes content and caps the readable summary at two sites", () => {
+  it("exports applied evidence, escapes content and includes up to four selected sites", () => {
     const site = { id:"a", rank:1, latitude_deg:-89.9, longitude_deg_east:0, slope_deg:2, criteria_scores:{illumination:.8,earth_visibility:.7,terrain_safety:.6,science_proximity:null}, metrics:{illumination_fraction:.8, earth_visibility_fraction:.7,longest_blackout_hours:2} } as Candidate;
     const result = { search_id:'<script>bad</script>', request, common_window:{ ...request.time_range, step_minutes:5 }, normalized_preferences:request.preferences, candidates:[site], assumptions:[], warnings:['<unsafe>'], provenance:{terrain:{dataset_version:'test',candidate_spacing_m:500,horizon_azimuth_step_deg:5}} } as unknown as SearchResponse;
-    const html = summaryHtml(result, [site,site,site], 'Prepared <area>');
+    const html = summaryHtml(result, [site, site, site, site, site], 'Prepared <area>');
     expect(html).toContain('2028-10-08');
     expect(html).toContain('Prepared &lt;area&gt;');
     expect(html).not.toContain('<script>');
-    expect(html.match(/<section>/g)).toHaveLength(2);
+    expect(html.match(/<section>/g)).toHaveLength(4);
     expect(html).toContain('sampled time');
     expect(html).toContain('unavailable for these sites');
   });

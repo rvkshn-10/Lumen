@@ -48,3 +48,16 @@ def test_revision_tracks_global_survey_and_scientific_code(tmp_path, monkeypatch
         current = source_revision(environment)
         assert current != previous
         previous = current
+
+
+def test_digest_invalidates_when_write_timestamp_is_preserved(tmp_path):
+    import os
+
+    from app.services.terrain_store import digest
+    path = tmp_path / "terrain.img"
+    path.write_bytes(b"original")
+    stat = path.stat()
+    first = digest(path)
+    path.write_bytes(b"modified")
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    assert digest(path) != first

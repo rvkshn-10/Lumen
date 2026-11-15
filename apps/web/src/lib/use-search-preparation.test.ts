@@ -13,5 +13,8 @@ describe("speculative search selection", () => {
       { ...area, center: { ...area.center, longitude_deg_east: Infinity } },
     ]) expect(speculativeRegion(changed)).toBeNull();
     expect(speculativeRegion({ selector_type: "full_supported_region" })).toBeNull();
+    const extended = { ...area, search_radius_km: 15 };
+    expect(speculativeRegion(extended)).toBeNull();
+    expect(speculativeRegion(extended, 15)).toEqual(extended);
   });
 });

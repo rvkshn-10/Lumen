@@ -101,12 +101,14 @@ async def _bounded_analysis(operation: str, payload: dict, request: Request) -> 
     finally:
         try:
             if reuse and not successful or not reuse and process is not None and process.poll() is None:
-                await asyncio.to_thread(worker_pool.discard, process)
+                await asyncio.to_thread(worker_pool.discard, process, close=False)
         finally:
             try:
                 if communication is not None:
-                    if not communication.done():
-                        communication.cancel()
+                    # Killing the process tree produces EOF. Wait for communicate's Windows
+                    # reader threads before closing their file objects.
                     await asyncio.gather(communication, return_exceptions=True)
+                if process is not None and (not reuse or not successful):
+                    worker_pool.close_streams(process)
             finally:
                 _active = False

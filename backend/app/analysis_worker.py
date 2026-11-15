@@ -111,6 +111,13 @@ def calculate(operation, payload):
 
 def main():
     if sys.argv[1] == "serve":
+        # Windows native DLL initialization can stall behind a blocking stdin reader.
+        # Initialize scientific libraries once before starting that control thread.
+        import numpy  # noqa: F401
+        import spiceypy  # noqa: F401
+        if os.getenv("LUMEN_TEMPORAL_KERNEL") == "compiled":
+            import importlib
+            importlib.import_module("app.services.temporal_kernel")
         commands = Queue(maxsize=2)
 
         def receive():

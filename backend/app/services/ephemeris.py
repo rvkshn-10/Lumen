@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timedelta
 from functools import lru_cache
@@ -25,9 +26,7 @@ def load_kernels(root: Path) -> tuple[dict, ...]:
     with LOCK:
         for name in KERNEL_FILES:
             path = root / name
-            from app.services.terrain_store import digest
-
-            if digest(path) != by_name[name]["sha256"]:
+            if hashlib.sha256(path.read_bytes()).hexdigest() != by_name[name]["sha256"]:
                 raise ValueError(f"Kernel checksum mismatch: {name}")
             spice.furnsh(str(path))
         # Fail immediately if orientation or ephemeris coverage is unavailable.

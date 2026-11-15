@@ -1,4 +1,6 @@
-"""Public limits remain locked until Intel and Mac speed/equivalence gates pass."""
+"""Stable limits plus an explicit Intel development radius; no latency qualification implied."""
+
+import os
 
 TIERS = {
     "detailed": {
@@ -16,8 +18,12 @@ FULL_REGION_END = "2028-10-31T00:00:00Z"
 
 
 def public_limits():
+    # User-authorized Intel-only development, separately enabled from stable tier gates.
+    radius = int(os.getenv("LUMEN_MAXIMUM_RADIUS_KM", "5"))
+    if radius not in (5, 10, 15):
+        raise ValueError("LUMEN_MAXIMUM_RADIUS_KM must be 5, 10 or 15")
     return {
-        "maximum_radius_km": TIERS["detailed"]["maximum_radius_km"],
+        "maximum_radius_km": radius,
         "maximum_live_days": TIERS["detailed"]["maximum_live_days"],
         "full_region_start_utc": FULL_REGION_START,
         "full_region_end_utc": FULL_REGION_END,

@@ -1,8 +1,9 @@
 import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import { coordinate, downloadTimelineCsv, hours, percent, utcRange, utcTime } from "../lib/format";
-import { COMPARE_LIMIT, MAX_SCENARIOS, alternativeScenario, batteryMargin, loadScenario, nextEvent, sampledEvents, scenarioKey, scenarioShareHash, scenarioWindow, visibilityRuns } from "../lib/scenarios";
+import { MAX_SCENARIOS, alternativeScenario, batteryMargin, loadScenario, nextEvent, sampledEvents, scenarioKey, scenarioShareHash, scenarioWindow, visibilityRuns } from "../lib/scenarios";
 import type { Candidate, TerrainData } from "../lib/types";
 import { COMPARE_COLORS } from "../lib/sky-geometry";
+import { COMPARE_LIMIT, compareSiteLabel } from "../lib/compare-sites";
 import type { Alternative, Audience, LunarEvent, Scenario, ScenarioResult } from "../lib/scenarios";
 import { LaunchSlipComparison } from "./LaunchSlipComparison";
 import { PoweredContactWindow } from "./PoweredContactWindow";
@@ -12,6 +13,7 @@ import { sampleIndexAt } from "../lib/mission-window";
 import { HorizonReview } from "./HorizonReview";
 import { CopilotExplanation } from "./CopilotExplanation";
 import { SolarGeneration } from "./SolarGeneration";
+import { CandidateResults } from "./CandidateResults";
 import { Icon } from "./Icon";
 import "./scenario-board.css";
 
@@ -26,7 +28,10 @@ const metrics = [
 type Key = typeof metrics[number]["key"];
 const metricAttributes = (id: string, key: string, raw: number | string) => ({ "data-metric": `${id}:${key}`, "data-raw": raw });
 const value = (row: Scenario, key: Key) => key === "energy_wh" ? row.site.power?.energy_wh : row.site.metrics[key];
-const label = (row: Scenario) => row.label ?? (row.site.rank ? `Candidate ${row.site.rank}` : coordinate(row.site.latitude_deg, row.site.longitude_deg_east));
+const siteCoordinates = (row: Scenario) => coordinate(row.site.latitude_deg, row.site.longitude_deg_east);
+const label = (row: Scenario) => row.label && !/^Site [A-D]$/.test(row.label)
+  ? row.label : row.site.rank ? `Candidate ${row.site.rank}` : siteCoordinates(row);
+const comparisonLabel = (row: Scenario, index: number) => `${compareSiteLabel(index)} · ${label(row)}`;
 
 function Metric({ row, metric }: { row: Scenario; metric: typeof metrics[number] }) {
   const number = value(row, metric.key);
@@ -57,8 +62,8 @@ function Timeline({ rows, start, end, clock, onInspect }: {
   const position = (time: number) => (time - start) * 100 / (end - start);
   return <section className="scenario-timeline" aria-label="Aligned site timelines">
     <p>{utcTime(new Date(start).toISOString())} to {utcTime(new Date(end).toISOString())} · Filled segments show visibility. Select a cutoff marker to inspect it.</p>
-    {rows.map(row => <div className="scenario-strip-row" key={row.key}>
-      <strong>{label(row)} <small>{row.request.time_range.start_utc.slice(0, 10)}</small></strong>
+    {rows.map((row, index) => <div className="scenario-strip-row" key={row.key}>
+      <strong>{comparisonLabel(row, index)} <small>{row.request.time_range.start_utc.slice(0, 10)}</small></strong>
       {(["sun_visible", "earth_visible"] as const).map((key, index) => {
         const runs = visibilityRuns(row.site, row.request, key);
         const title = index ? "Earth in view" : "Sunlight";
@@ -71,7 +76,7 @@ function Timeline({ rows, start, end, clock, onInspect }: {
             if (tick < 0 || tick > 100) return null;
             return <button className="scenario-event" type="button" key={event.time_utc} style={{ left: `${tick}%` }}
               title={`Inspect ${type} · ${utcTime(event.time_utc)}`}
-              aria-label={`Inspect ${label(row)} ${type} at ${utcTime(event.time_utc)}`}
+              aria-label={`Inspect ${comparisonLabel(row, index)} ${type} at ${utcTime(event.time_utc)}`}
               onClick={() => onInspect(row, { ...event, type, refined: row.site.events != null })} />;
           })}
         </div><span className="sr-only">{runs.filter(run => run.visible).map(run => `${utcTime(new Date(run.start).toISOString())} to ${utcTime(new Date(run.end).toISOString())}`).join("; ") || "No visible samples"}</span></div>;
@@ -161,33 +166,22 @@ const boardViews = ["Overview", "Timeline", "Analysis"] as const;
 type BoardView = typeof boardViews[number];
 const overviewMetrics = [metrics[1], metrics[0], metrics[2], metrics[3]];
 
-function ComparisonValues({ rows, options, onReplace }: {
-  rows: Scenario[]; options: Scenario[]; onReplace: (previous: string, next: string) => void;
-}) {
+function ComparisonValues({ rows }: { rows: Scenario[] }) {
   const timeRange = rows[0].request.time_range;
   const commonWindow = rows.every(({ request }) =>
     request.time_range.start_utc === timeRange.start_utc && request.time_range.end_utc === timeRange.end_utc);
-  const adjustable = options.length > rows.length;
   const byContact = [...rows].sort((a, b) => b.site.metrics.longest_communication_hours - a.site.metrics.longest_communication_hours);
   const continuousDifference = commonWindow && byContact.length === 2
     ? byContact[0].site.metrics.longest_communication_hours - byContact[1].site.metrics.longest_communication_hours : 0;
   return <section className="scenario-comparison" aria-label="Compare selected scenarios">
     {commonWindow && <p className="compare-window">{utcRange(timeRange)}</p>}
+    {rows.length > 2 && <p className="compare-scroll-hint" data-sites={rows.length}>Scroll the table to see all sites</p>}
     <div className="compare-values-scroll" role="region" aria-label="Comparison values" tabIndex={rows.length > 2 ? 0 : undefined}>
       <table className="comparison-table compare-values" data-sites={rows.length}>
         <thead><tr>
           <th scope="col"><span className="sr-only">Metric</span></th>
-          {rows.map((row, index) => <th scope="col" key={index}>
-            {adjustable ? <>
-              <select className="compare-site-picker" aria-label={`Site in column ${index + 1}`} value={row.key}
-                onChange={event => onReplace(row.key, event.target.value)}>
-                {options.map(option => <option key={option.key} value={option.key}
-                  disabled={option.key !== row.key && rows.some(selected => selected.key === option.key)}>
-                  {label(option)}{options.filter(other => label(other) === label(option)).length > 1 ? ` · ${utcRange(option.request.time_range)}` : ""}
-                </option>)}
-              </select>
-              <span className="compare-site-print">{label(row)}</span>
-            </> : label(row)}
+          {rows.map((row, index) => <th scope="col" key={row.key}>
+            {compareSiteLabel(index)}<small>{label(row)}</small>
             {!commonWindow && <small>{utcRange(row.request.time_range)}</small>}
           </th>)}
         </tr></thead>
@@ -206,15 +200,16 @@ function ComparisonValues({ rows, options, onReplace }: {
         })}</tbody>
       </table>
     </div>
-    {continuousDifference >= 0.05 && <p className="compare-finding">{label(byContact[0])} has <strong>{hours(continuousDifference)} more</strong> uninterrupted Earth visibility than {label(byContact[1])}.</p>}
+    {continuousDifference >= 0.05 && <p className="compare-finding">{compareSiteLabel(rows.indexOf(byContact[0]))} has <strong>{hours(continuousDifference)} more</strong> uninterrupted Earth visibility than {compareSiteLabel(rows.indexOf(byContact[1]))}.</p>}
   </section>;
 }
 
-export function ScenarioBoard({ result, audience, onInspect, onSummarySelection, initialRows, selectInitialRows = false, terrain }: {
+export function ScenarioBoard({ result, audience, onInspect, onSummarySelection, initialRows, selectInitialRows = false, example = false, terrain }: {
   result?: ScenarioResult; audience: Audience; onInspect?: (id: string) => void;
-  onSummarySelection?: (sites: Candidate[]) => void; initialRows?: Scenario[]; selectInitialRows?: boolean; terrain?: TerrainData | null;
+  onSummarySelection?: (sites: Candidate[]) => void; initialRows?: Scenario[]; selectInitialRows?: boolean;
+  example?: boolean; terrain?: TerrainData | null;
 }) {
-  const [rows, setRows] = useState<Scenario[]>(() => initialRows ?? result?.candidates.slice(0, 4).map(site => ({ site, request: result.request, key: scenarioKey(site.id, result.request) })) ?? []);
+  const [rows, setRows] = useState<Scenario[]>(() => initialRows ?? result?.candidates.map(site => ({ site, request: result.request, key: scenarioKey(site.id, result.request) })) ?? []);
   const [selected, setSelected] = useState<string[]>(() => rows.slice(0, selectInitialRows ? COMPARE_LIMIT : 2).map(row => row.key));
   const [view, setView] = useState<BoardView>("Overview");
   const [analysisVisited, setAnalysisVisited] = useState(false);
@@ -224,7 +219,10 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
   const shareField = useRef<HTMLInputElement>(null);
   const [sort, setSort] = useState<Key | "start">("start");
   const [sharing, setSharing] = useState(false);
-  const [addSite, setAddSite] = useState("");
+  const [addingSite, setAddingSite] = useState(false);
+  const extraSitePicker = useRef<HTMLSelectElement>(null);
+  const addSiteButton = useRef<HTMLButtonElement>(null);
+  const sitePickers = useRef<(HTMLSelectElement | null)[]>([]);
   const [editing, setEditing] = useState<Scenario | null>(null);
   const [startDate, setStartDate] = useState("");
   const [offset, setOffset] = useState(0);
@@ -257,9 +255,26 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
   useEffect(() => () => controller.current?.abort(), []);
   const picked = useMemo(() => selected.flatMap(key => rows.find(row => row.key === key) ?? []), [rows, selected]);
   const summarySites = useMemo(() => result ? picked
-    .filter(row => result.candidates.some(site => row.key === scenarioKey(site.id, result.request)))
+    .filter(row => row.key === scenarioKey(row.site.id, result.request))
     .map(row => row.site) : [], [picked, result]);
   useEffect(() => onSummarySelection?.(summarySites), [onSummarySelection, summarySites]);
+  const compareFull = picked.length >= COMPARE_LIMIT;
+  const canPickMore = picked.length < rows.length && !compareFull;
+  const showExtraPicker = addingSite && canPickMore;
+  const slots = showExtraPicker ? [...picked, null] : picked;
+  const optionNames = useMemo(() => rows.map(row => {
+    const name = label(row);
+    const position = siteCoordinates(row);
+    const sameName = rows.some(other => other !== row && label(other) === name);
+    return { key: row.key, name: [name, name !== position && position, sameName && utcRange(row.request.time_range)].filter(Boolean).join(" · ") };
+  }), [rows]);
+  useEffect(() => { if (showExtraPicker) extraSitePicker.current?.focus(); }, [showExtraPicker]);
+  const compared = new Map(picked.flatMap((row, index) => result && row.key === scenarioKey(row.site.id, result.request)
+    ? [[row.site.id, compareSiteLabel(index)] as const] : []));
+  const currentLabel = (row: Scenario) => {
+    const index = picked.indexOf(row);
+    return index < 0 ? label(row) : comparisonLabel(row, index);
+  };
   const axis = picked.length ? picked : rows;
   const start = axis.length ? Math.min(...axis.map(row => Date.parse(row.request.time_range.start_utc))) : Date.parse(result?.common_window.start_utc ?? "");
   const end = axis.length ? Math.max(...axis.map(row => Date.parse(row.request.time_range.end_utc))) : Date.parse(result?.common_window.end_utc ?? "");
@@ -289,24 +304,63 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
   const mapSites = [...new Map(picked.map(row => [row.site.id, row.site])).values()];
   const alternatives = [...new Map([...(result?.alternatives ?? []), ...rows.flatMap(row => row.alternatives ?? [])]
     .map(option => [option.suggestion_id ?? `${option.kind}:${option.id}:${JSON.stringify(option.request)}`, option])).values()];
-  const activeRowsBySite = new Map(picked.filter(row => clock >= Date.parse(row.request.time_range.start_utc)
-    && clock <= Date.parse(row.request.time_range.end_utc)).map(row => [row.site.id, row]));
+  const activeRowsBySite = new Map<string, Scenario>();
+  for (const row of picked) {
+    if (clock >= Date.parse(row.request.time_range.start_utc)
+      && clock <= Date.parse(row.request.time_range.end_utc) && !activeRowsBySite.has(row.site.id)) {
+      activeRowsBySite.set(row.site.id, row);
+    }
+  }
   const activeSites = Array.from(activeRowsBySite.values(), row => row.site);
   const sceneSample = activeSites[0]?.timeline[Math.max(0, sampleIndexAt(activeSites[0].timeline, clock))];
-  async function add(id: string, request: Scenario["request"], name?: string) {
-    if (controller.current || rows.length >= MAX_SCENARIOS) return;
+  function appendSelection(key: string) {
+    setSelected(current => current.includes(key) || current.length >= COMPARE_LIMIT ? current : [...current, key]);
+    setAddingSite(false);
+  }
+  function replaceSelection(index: number, key: string) {
+    setSelected(current => {
+      const previousIndex = current.indexOf(key);
+      return current.map((currentKey, position) => position === index ? key
+        : position === previousIndex ? current[index] : currentKey);
+    });
+  }
+  function removeSelection(key: string) {
+    setSelected(current => current.filter(item => item !== key));
+    setAddingSite(false);
+  }
+  function toggleCandidate(id: string) {
+    if (!result) return;
+    const key = scenarioKey(id, result.request);
+    if (compared.has(id)) removeSelection(key);
+    else if (!compareFull) {
+      if (rows.some(row => row.key === key)) appendSelection(key);
+      else return add(id, result.request, undefined, true);
+    }
+  }
+  async function add(id: string, request: Scenario["request"], name?: string, addToComparison = false) {
+    if (controller.current) return "Another site is being analyzed.";
+    if (rows.length >= MAX_SCENARIOS) return "Remove a saved scenario in Edit scenarios to make room for another site.";
     setError("");
-    if (rows.some(row => row.key === scenarioKey(id, request))) { setError("That site and window are already on the board."); return; }
+    if (rows.some(row => row.key === scenarioKey(id, request))) {
+      const message = "That site and window are already on the board.";
+      if (!addToComparison) setError(message);
+      return message;
+    }
     const abort = new AbortController();
     controller.current = abort;
     setBusy(true);
     try {
-      const row = await loadScenario(id, request, abort.signal);
+      const row = await loadScenario(id, request, abort.signal, !addToComparison);
       if (abort.signal.aborted) return;
-      setRows(current => current.some(item => item.key === row.key) ? current : [...current, { ...row, label: name }]);
+      setRows(current => current.some(item => item.key === row.key) || current.length >= MAX_SCENARIOS ? current : [...current, { ...row, label: name }]);
+      if (addToComparison) appendSelection(row.key);
       setEditing(null);
     } catch (reason) {
-      if (!abort.signal.aborted) setError(reason instanceof Error ? reason.message : "Scenario analysis unavailable.");
+      if (!abort.signal.aborted) {
+        const message = reason instanceof Error ? reason.message : "Site analysis unavailable.";
+        if (!addToComparison) setError(message);
+        return message;
+      }
     } finally {
       controller.current = null;
       if (!abort.signal.aborted) setBusy(false);
@@ -318,16 +372,15 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     if (target) return add(target.id, target.request);
     setError("This suggestion is missing the target site or request needed to analyze it.");
   }
-  const shareLink = sharing && rows.length ? new URL(scenarioShareHash(rows), window.location.href).href : "";
+  const shareLink = sharing && picked.length ? new URL(scenarioShareHash(picked), window.location.href).href : "";
   function exportCsv() {
-    downloadTimelineCsv(rows.map(row => ({ site_id: row.site.id, start_utc: row.request.time_range.start_utc, end_utc: row.request.time_range.end_utc,
+    downloadTimelineCsv(picked.map((row, index) => ({ comparison_slot: compareSiteLabel(index), site_id: row.site.id, start_utc: row.request.time_range.start_utc, end_utc: row.request.time_range.end_utc,
       illumination_fraction: row.site.metrics.illumination_fraction, earth_visibility_fraction: row.site.metrics.earth_visibility_fraction,
       longest_darkness_hours: row.site.metrics.longest_darkness_hours, energy_wh: row.site.power?.energy_wh,
       next_sunset_utc: nextEvent(row.site, "sunset", Math.max(clock, Date.parse(row.request.time_range.start_utc)))?.time_utc,
       next_earthset_utc: nextEvent(row.site, "earthset", Math.max(clock, Date.parse(row.request.time_range.start_utc)))?.time_utc })), "lumen-scenarios.csv");
   }
 
-  const available = result?.candidates.filter(site => !rows.some(row => row.key === scenarioKey(site.id, result.request))) ?? [];
   const canAdd = !busy && rows.length < MAX_SCENARIOS;
   const ids = (name: BoardView) => ({ tab: `${boardId}-tab-${name}`, panel: `${boardId}-panel-${name}` });
   const synthetic = import.meta.env.VITE_LUMEN_MOCK === "1" || result?.provenance.synthetic === true;
@@ -344,6 +397,39 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     menu.querySelector("summary")?.focus();
   }}>
     <h2 id="scenario-board-title" className="sr-only">Scenario board</h2>
+    {rows.length > 0 && <div className="compare-site-controls glass-surface" id="comparison-sites" role="group" aria-label="Sites to compare">
+      <div className="compare-site-slots">
+        {slots.map((row, index) => <div className="compare-site-slot" key={index}>
+          <label className="field">
+            <strong>{compareSiteLabel(index)}</strong>
+            <select ref={row ? node => { sitePickers.current[index] = node; } : extraSitePicker}
+              value={row?.key ?? ""} onChange={event => row
+                ? replaceSelection(index, event.target.value) : appendSelection(event.target.value)}>
+              {!row && <option value="" disabled>Choose a site</option>}
+              {optionNames.filter(option => row || !selected.includes(option.key))
+                .map(option => <option key={option.key} value={option.key}>{option.name}</option>)}
+            </select>
+          </label>
+          <button type="button" className="compare-remove-site"
+            aria-label={`${row ? "Remove" : "Cancel adding"} ${compareSiteLabel(index)}`}
+            onClick={() => {
+              if (row) {
+                (picked.length > 1 ? sitePickers.current[Math.max(0, index - 1)] : tabs.current[0])?.focus();
+                removeSelection(row.key);
+              } else {
+                setAddingSite(false);
+                addSiteButton.current?.focus();
+              }
+            }}><Icon name="close" size={16} /></button>
+        </div>)}
+      </div>
+      {canPickMore && <button type="button" ref={addSiteButton} className="secondary-button compare-add-site"
+        aria-expanded={showExtraPicker} onClick={() => {
+          if (showExtraPicker) extraSitePicker.current?.focus();
+          else setAddingSite(true);
+        }}><span aria-hidden="true">+</span> Add a site</button>}
+      <p className="sr-only" role="status">{picked.length} of {COMPARE_LIMIT} sites selected.</p>
+    </div>}
     <div className="compare-toolbar">
       <div className="compare-tabs" role="tablist" aria-label="Comparison views">
         {boardViews.map((name, index) => <button key={name} type="button" role="tab"
@@ -366,8 +452,8 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
       {rows.length > 0 && <details ref={shareMenu} className="compare-actions">
         <summary aria-label="Share and export"><Icon name="download" size={16} /><span className="compare-action-label">Share</span></summary>
         <div className="compare-menu">
-          <button onClick={() => { closeActions(); setSharing(true); }}>Share link</button>
-          <button onClick={() => { closeActions(); exportCsv(); }}>Export CSV</button>
+          <button disabled={!picked.length} onClick={() => { closeActions(); setSharing(true); }}>Share link</button>
+          <button disabled={!picked.length} onClick={() => { closeActions(); exportCsv(); }}>Export CSV</button>
           <button disabled={!picked.length} onClick={() => { closeActions(); window.print(); }}>Print / Save PDF</button>
         </div>
       </details>}
@@ -379,13 +465,10 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     </div>}
 
     <div className="scenario-overview" role="tabpanel" id={ids("Overview").panel} aria-labelledby={ids("Overview").tab} hidden={view !== "Overview"}>
-      {picked.length > 0 && <ComparisonValues rows={picked} options={rows}
-        onReplace={(previous, next) => setSelected(current =>
-          current.includes(next) ? current : current.map(key => key === previous ? next : key))} />}
-      {picked.length > 0 && <SolarGeneration rows={picked} name={label} start={start} end={end} />}
-      {picked.length < 2 && rows.length > 1 && <p className="compare-selection-hint">Select two or more scenarios to compare them.</p>}
-      {!rows.length && !available.length && !alternatives.length && <p>No scenarios to compare.</p>}
-      {(rows.length > 0 || available.length > 0) && <details className="compare-management">
+      {picked.length > 0 && <ComparisonValues rows={picked} />}
+      {picked.length > 0 && <SolarGeneration rows={picked} name={comparisonLabel} start={start} end={end} />}
+      {picked.length < 2 && canPickMore && <p className="compare-selection-hint">Add {picked.length ? "another site" : "a site"} to start comparing.</p>}
+      {rows.length > 0 && <details className="compare-management">
         <summary>Edit scenarios</summary>
         <section className="compare-scenarios" aria-label="Scenarios">
         <header className="compare-section-heading">
@@ -402,7 +485,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
               <label className="compare-scenario-choice">
                 <input type="checkbox" checked={checked} disabled={!checked && selected.length >= COMPARE_LIMIT}
                   aria-label={`Compare ${label(row)} starting ${row.request.time_range.start_utc}`}
-                  onChange={() => setSelected(current => checked ? current.filter(key => key !== row.key) : [...current, row.key])} />
+                  onChange={() => checked ? removeSelection(row.key) : appendSelection(row.key)} />
                 <span><strong>{label(row)}</strong><small>{utcRange(row.request.time_range)}</small>
                   {row.constraint_status?.passes === false && <small className="compare-limit-status">Falls short of mission limits</small>}
                 </span>
@@ -420,7 +503,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
                   <button onClick={() => openEvidence(row)}>Charts and evidence</button>
                   <button onClick={() => { setOpenChart(undefined); setLaunch({ key: row.key }); show("Analysis"); }}>Compare launch slips</button>
                   <button disabled={!canAdd} onClick={() => { setEditing(row); setStartDate(row.request.time_range.start_utc.slice(0, 16)); }}>Duplicate &amp; change date</button>
-                  <button onClick={event => {
+                  {!candidate && <button onClick={event => {
                     event.stopPropagation();
                     const item = event.currentTarget.closest("li");
                     const neighbor = item?.nextElementSibling ?? item?.previousElementSibling;
@@ -431,24 +514,12 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
                     if (editing?.key === row.key) setEditing(null);
                     if (launchKey === row.key) setLaunch(undefined);
                     if (chart === row.key) setOpenChart(undefined);
-                  }}>Remove from board</button>
+                  }}>Remove from board</button>}
                 </div>
               </details>
             </li>;
           })}
         </ul>
-        {result && available.length > 0 && <form className="scenario-tools compare-add" onSubmit={event => {
-          event.preventDefault();
-          const site = available.find(candidate => candidate.id === addSite);
-          if (!site || !canAdd) return;
-          setRows(current => [...current, { key: scenarioKey(site.id, result.request), site, request: result.request }]);
-          setAddSite("");
-        }}>
-          <label className="field">Candidate<select required value={addSite} onChange={event => setAddSite(event.target.value)}>
-            <option value="">Choose a candidate</option>{available.map(site => <option value={site.id} key={site.id}>Candidate {site.rank}</option>)}
-          </select></label>
-          <button className="secondary-button" disabled={!addSite || !canAdd}>Add to board</button>
-        </form>}
         {editing && <form className="scenario-tools compare-add" onSubmit={event => { event.preventDefault(); void add(editing.site.id, scenarioWindow(editing.request, `${startDate}Z`), label(editing)); }}>
           <label className="field">New start date for {label(editing)} (UTC)<input autoFocus required type="datetime-local" value={startDate} onChange={event => setStartDate(event.target.value)} /></label>
           <button className="primary-button" disabled={!canAdd}>Analyze the new date</button>
@@ -459,19 +530,20 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     </div>
 
     <div className="compare-timeline-panel" role="tabpanel" id={ids("Timeline").panel} aria-labelledby={ids("Timeline").tab} hidden={view !== "Timeline"}>
-      {view === "Timeline" && rows.length > 0 && <>
+      {view === "Timeline" && !picked.length && <p>Add a site to see its timeline.</p>}
+      {view === "Timeline" && picked.length > 0 && <>
         <header className="compare-section-heading"><h3>Sunlight and Earth visibility</h3></header>
         <label className="field scenario-clock glass-surface">Compare time <time dateTime={new Date(clock).toISOString()}>{utcTime(new Date(clock).toISOString())}</time>
           <input type="range" aria-label="Compare time" min={0} max={maxOffset} value={Math.min(offset, maxOffset)} aria-valuetext={utcTime(new Date(clock).toISOString())} onChange={event => setOffset(Number(event.target.value))} />
         </label>
-        <Timeline rows={axis} start={start} end={end} clock={clock} onInspect={inspectCutoff} />
+        <Timeline rows={picked} start={start} end={end} clock={clock} onInspect={inspectCutoff} />
         <details className="compare-disclosure">
           <summary>Upcoming cutoffs</summary>
           <p className="field-hint">Countdowns follow the compare clock. Times marked “About” are estimated from samples.</p>
           <div className="compare-values-scroll" role="region" aria-label="Upcoming cutoffs" tabIndex={0}>
             <table className="comparison-table compare-values compare-cutoffs"><thead><tr><th scope="col">Scenario</th><th scope="col">Next sunset</th><th scope="col">Next Earthset</th></tr></thead>
-              <tbody>{axis.map(row => <tr key={row.key} data-scenario-start={row.request.time_range.start_utc}>
-                <th scope="row">{label(row)} <small>{row.request.time_range.start_utc.slice(0, 10)}</small></th>
+              <tbody>{picked.map((row, index) => <tr key={row.key} data-scenario-start={row.request.time_range.start_utc}>
+                <th scope="row">{comparisonLabel(row, index)} <small>{row.request.time_range.start_utc.slice(0, 10)}</small></th>
                 {(["sunset", "earthset"] as const).map(type => <td key={type}>
                   <EventCountdown row={row} type={type} clock={Math.max(clock, Date.parse(row.request.time_range.start_utc))} onInspect={cutoff => inspectCutoff(row, cutoff)} />
                 </td>)}
@@ -492,12 +564,16 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
               selected={activeSites[0].id} onSelect={id => {
                 const row = activeRowsBySite.get(id);
                 if (row) openEvidence(row, clock);
-              }} compare={mapSites.map(site => site.id)} sample={sceneSample} mode={terrainView} layer="terrain"
+              }} compare={picked.map(row => row.site.id)} comparisonSites={mapSites} sample={sceneSample} mode={terrainView} layer="terrain"
               mapCandidates={result?.map_candidates ?? []} psr={null} features={[]} /></Suspense>
               : <p>No selected scenario covers this clock time.</p>}
-            <div className="scenario-tools">{mapSites.map((site, index) => <span key={site.id}>
-              <span className="scenario-dot" style={{ backgroundColor: COMPARE_COLORS[index] }} />{coordinate(site.latitude_deg, site.longitude_deg_east)}
-            </span>)}</div>
+            <div className="scenario-tools">{mapSites.map(site => {
+              const slots = picked.flatMap((row, index) => row.site.id === site.id ? [index] : []);
+              return <span key={site.id}>
+                <span className="scenario-dot" style={{ backgroundColor: COMPARE_COLORS[slots[0]] }} />
+                {slots.map(compareSiteLabel).join(" / ")} · {coordinate(site.latitude_deg, site.longitude_deg_east)}
+              </span>;
+            })}</div>
           </div>}
         </details>}
         {mapSites.length > 1 && <details className="compare-disclosure" open={map} onToggle={event => setMap(event.currentTarget.open)}>
@@ -527,16 +603,16 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
         {picked.length > 0 ? <>
           <details className="compare-disclosure compare-tool" open>
             <summary>Mission windows</summary>
-            <MissionWindowCheck rows={picked} board={rows} name={label} example={selectInitialRows} synthetic={synthetic} onInspect={(row, time) => openEvidence(row, time)} />
+            <MissionWindowCheck rows={picked} board={rows} name={currentLabel} example={example} synthetic={synthetic} onInspect={(row, time) => openEvidence(row, time)} />
           </details>
           <details className="compare-disclosure compare-tool">
             <summary>Powered contact</summary>
-            <PoweredContactWindow rows={picked} name={label} minimumHours={poweredMinimumHours}
+            <PoweredContactWindow rows={picked} name={currentLabel} minimumHours={poweredMinimumHours}
               onMinimumChange={setPoweredMinimumHours} clock={clock} />
           </details>
-        </> : <p>Select scenarios in Overview to analyze the mission windows.</p>}
+        </> : <p>Add a site to analyze its mission window.</p>}
         {picked.length > 1 && <CopilotExplanation key={JSON.stringify(picked.map(row => row.key))} candidates={picked.map(row => ({
-          name: `${label(row).slice(0, 75)} · ${row.request.time_range.start_utc.slice(0, 16).replace("T", " ")} UTC`,
+          name: `${currentLabel(row).slice(0, 75)} · ${row.request.time_range.start_utc.slice(0, 16).replace("T", " ")} UTC`,
           sunlight_fraction: row.site.metrics.illumination_fraction,
           earth_visibility_fraction: row.site.metrics.earth_visibility_fraction,
           longest_darkness_hours: row.site.metrics.longest_darkness_hours,
@@ -553,6 +629,8 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
         </details>}
       </>}
     </div>
+    {result && onInspect && <CandidateResults result={result} onSelect={onInspect} onToggleCompare={toggleCandidate}
+      compared={compared} comparisonFull={compareFull} />}
     {busy && <p role="status">Analyzing scenario…</p>}
     {error && <p role="alert" className="guide-error">{error}</p>}
     <div hidden={view !== "Analysis" && rows.length > 0 && !rows.some(row => row.constraint_status?.passes === false)}>

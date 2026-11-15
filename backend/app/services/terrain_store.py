@@ -36,9 +36,42 @@ class UnknownSite(DataUnavailable):
     """The release is available, but the requested stable location is not."""
 
 
-def digest(path: Path) -> str:
+@lru_cache(maxsize=1)
+def _windows_file_api():
+    import ctypes
+    class BasicInfo(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_longlong) for name in ("created", "accessed", "written", "changed")] + [("attributes", ctypes.c_ulong)]
+    library = ctypes.WinDLL("kernel32", use_last_error=True)
+    library.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p]
+    library.CreateFileW.restype = ctypes.c_void_p
+    library.GetFileInformationByHandleEx.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong]
+    library.CloseHandle.argtypes = [ctypes.c_void_p]
+    return library, BasicInfo
+
+
+def artifact_stamp(path):
     stat = path.stat()
-    return _digest(path, (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
+    changed = stat.st_ctime_ns
+    if os.name == "nt":
+        # CPython 3.12's Windows st_ctime is creation time. NT ChangeTime also
+        # catches content replacement when a copy tool preserves LastWriteTime.
+        import ctypes
+        library, info_type = _windows_file_api()
+        handle = library.CreateFileW(str(path.resolve()), 0x80, 7, None, 3, 0x02000000, None)
+        if handle == ctypes.c_void_p(-1).value:
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            info = info_type()
+            if not library.GetFileInformationByHandleEx(handle, 0, ctypes.byref(info), ctypes.sizeof(info)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            changed = info.changed
+        finally:
+            library.CloseHandle(handle)
+    return stat.st_size, stat.st_mtime_ns, changed, stat.st_ino
+
+
+def digest(path: Path) -> str:
+    return _digest(path, artifact_stamp(path))
 
 
 @lru_cache(maxsize=256)
@@ -50,8 +83,7 @@ def _digest(path, stamps):
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             checkpoint()
             value.update(block)
-    stat = path.stat()
-    if stamps != (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns):
+    if stamps != artifact_stamp(path):
         raise DataUnavailable("Scientific artifact changed during verification")
     return value.hexdigest()
 

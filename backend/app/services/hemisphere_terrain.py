@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from app.services.dataset import DataUnavailable
-from app.services.terrain_store import digest
+from app.services.terrain_store import artifact_stamp, digest
 from app.settings import REPOSITORY_ROOT
 
 ROOT = Path(os.getenv("LUMEN_HEMISPHERE_ROOT", REPOSITORY_ROOT / "data/raw/hemisphere-lola"))
@@ -46,7 +46,7 @@ def source():
         metadata = json.loads(names[0].read_text())
         names.extend(ROOT / item["file"] for item in metadata["files"].values())
         stamps = tuple(
-            (p.stat().st_size, p.stat().st_mtime_ns, p.stat().st_ctime_ns) for p in names
+            artifact_stamp(p) for p in names
         )
         return _verified(ROOT, stamps)
     except (OSError, ValueError, KeyError) as exc:
@@ -125,12 +125,12 @@ def lattice(region):
     return x[keep], y[keep], lat[keep], lon[keep]
 
 
-_partial = None  # At most one interrupted area, <=317 points under public limits.
+_partial = None  # At most one interrupted area, <=2,821 points under the 15 km Intel development limit.
 
 
 def derive(grids, lat, lon):
     global _partial
-    from app.services.preparation_control import checkpoint
+    from app.services.preparation_control import active, checkpoint
 
     identity = (tuple(id(value) for value in grids.values()), lat.tobytes(), lon.tobytes())
     if _partial is not None and _partial[0] == identity:
@@ -143,9 +143,11 @@ def derive(grids, lat, lon):
     distances = np.r_[np.arange(118, 20000, 118), np.arange(20000, 200000, 472), 200000]
     azimuth = np.deg2rad(np.arange(0, 360, 5))[None, :, None]
     angle = distances / RADIUS
-    for start in range(sum(len(row) for row in profiles), len(lat), 8):
+    # Speculation uses one-site quanta to yield promptly even on cold terrain pages.
+    batch = 1 if active() else 8
+    for start in range(sum(len(row) for row in profiles), len(lat), batch):
         checkpoint()
-        stop = min(start + 8, len(lat))
+        stop = min(start + batch, len(lat))
         raylat, raylon = destination(
             lat[start:stop, None, None], lon[start:stop, None, None], azimuth, distances
         )

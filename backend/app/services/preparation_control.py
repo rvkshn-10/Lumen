@@ -11,6 +11,10 @@ class PreparationCanceled(Exception):
     pass
 
 
+def active():
+    return _preparing
+
+
 def checkpoint():
     if _preparing and cancel.is_set():
         raise PreparationCanceled()

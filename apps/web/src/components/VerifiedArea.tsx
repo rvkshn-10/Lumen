@@ -61,7 +61,7 @@ export function VerifiedArea({ catalog, request, features, terrain, outcome, pen
   {selectionError && <p className="guide-error" role="alert">{selectionError}</p>}
     <div className="area-scope-picker" role="group" aria-label="Search scope">
       <button type="button" aria-pressed={wholeSurvey} disabled={!catalog.hemisphere_survey} onClick={() => chooseScope("southern_hemisphere")}><strong>Survey the hemisphere</strong><span>{catalog.hemisphere_survey ? "827 regional locations · about 150 km apart" : "Survey data unavailable on this service"}</span></button>
-      <button type="button" aria-pressed={!wholeSurvey && !fullRegion} onClick={() => chooseScope("local")}><strong>Search a local area</strong><span>Detailed terrain · up to 5 km radius</span></button>
+      <button type="button" aria-pressed={!wholeSurvey && !fullRegion} onClick={() => chooseScope("local")}><strong>Search a local area</strong><span>Detailed terrain · up to {catalog.public_limits.maximum_radius_km} km radius</span></button>
       <button type="button" aria-pressed={fullRegion} onClick={() => chooseScope("full_supported_region")}><strong>Compare the polar cap</strong><span>Prepared October 2028 window</span></button>
     </div>
   {(wholeSurvey || fullRegion) && <p className="area-scope-explanation field-hint">{wholeSurvey ? "Ranks regional locations across the entire south using coarse horizons. Refine shortlisted areas with detailed local terrain." : "Compare prepared polar sites over the fixed October 2028 window."}</p>}
@@ -86,6 +86,7 @@ export function VerifiedArea({ catalog, request, features, terrain, outcome, pen
       {request.region.selector_type === "circle" && <div className="guide-fields"><label className="field">Latitude °S (negative)<input type="number" min="-90" max="0" step="any" value={center.latitude_deg} onChange={event => selectCoordinate({ ...center, latitude_deg: Number(event.target.value) })} /></label>
         <label className="field">Longitude °E<input type="number" min="-180" max="179.999999" step="any" value={center.longitude_deg_east} onChange={event => selectCoordinate({ ...center, longitude_deg_east: Number(event.target.value) })} /></label></div>}
       {request.region.selector_type !== "full_supported_region" && <label className="field">Search radius (km)<input type="number" min="1" max={catalog.public_limits.maximum_radius_km} step=".01" value={request.region.search_radius_km ?? ""} onChange={event => onChange({ ...request, region: { ...request.region, search_radius_km: event.target.value ? Number(event.target.value) : undefined } })} /></label>}
+      {catalog.public_limits.maximum_radius_km > 5 && <p className="field-hint">Areas above 5 km are experimental and may take longer. The seven-day mission limit still applies.</p>}
       <HemisphereDiscovery features={features} center={center} local={local} onExplore={() => { setLocal(false); setView("globe"); }} onSelect={coordinate => { setView("globe"); selectCoordinate(coordinate); }} />
       <details className="area-coverage-details"><summary>Coverage details</summary>
         <p>Prepared sites are spaced {catalog.candidate_spacing_m} m apart. The grid excludes the exact pole.</p>
@@ -104,6 +105,7 @@ export function VerifiedArea({ catalog, request, features, terrain, outcome, pen
     </div>
     {error && <div className="area-feedback"><p>{error}</p><button className="secondary-button" onClick={onRetry}>Retry coverage check</button></div>}
     {outcome?.status === "outside" && <div className="area-feedback">
+      <p className="field-hint">Choose a prepared south-pole area to compare detailed mission results.</p>
       {southernCoordinate(center) && <a className="text-button" href="#area-preview">Preview this area</a>}
       <button className="text-button" onClick={() => selectCoordinate({ latitude_deg: -89.9, longitude_deg_east: 0 })}>Use a supported south-pole area</button>
     </div>}

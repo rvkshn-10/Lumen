@@ -25,7 +25,7 @@ export function PlanningMission({ request, catalog, features, onChange, onOpenLi
       </section>
       <div className="mission-priority">
         <label className="field">
-          <strong>Ranking priority</strong>
+          <strong>Mission priority</strong>
           <select value={priority} aria-describedby="mission-priority-hint" onChange={event => {
             const preset = MISSION_PRESETS[presetNames.indexOf(event.target.value)];
             if (preset) onChange({
