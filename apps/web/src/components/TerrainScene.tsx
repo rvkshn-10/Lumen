@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { Canvas } from "@react-three/fiber";
 import { Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -101,9 +102,7 @@ function CandidateCloud({
   onSelect: (id: string) => void;
 }) {
   const geometry = useMemo(() => {
-    const base = Math.min(
-      ...terrain.elevations_m.filter((v): v is number => v != null),
-    );
+    const base = baseHeight(terrain);
     const positions = new Float32Array(points.length * 3),
       colors = new Float32Array(points.length * 3);
     points.forEach((point, i) => {
@@ -131,6 +130,7 @@ function CandidateCloud({
   return (
     <points
       geometry={geometry}
+      frustumCulled={false}
       onClick={(event) => {
         event.stopPropagation();
         const point = points[event.index ?? -1];
@@ -149,23 +149,36 @@ function CandidateCloud({
   );
 }
 
+/** Bilinear height, matching how the mesh triangles interpolate, so pins and lines sit on the ground. */
 function heightAt(terrain: TerrainData, x: number, y: number) {
   const [xmin, ymin, xmax, ymax] = terrain.extent_m;
-  const col = Math.max(
-    0,
-    Math.min(
-      terrain.width - 1,
-      Math.round(((x - xmin) / (xmax - xmin)) * (terrain.width - 1)),
-    ),
-  );
-  const row = Math.max(
-    0,
-    Math.min(
-      terrain.height - 1,
-      Math.round(((ymax - y) / (ymax - ymin)) * (terrain.height - 1)),
-    ),
-  );
-  return terrain.elevations_m[row * terrain.width + col] ?? 0;
+  const fx = Math.max(0, Math.min(terrain.width - 1, ((x - xmin) / (xmax - xmin)) * (terrain.width - 1)));
+  const fy = Math.max(0, Math.min(terrain.height - 1, ((ymax - y) / (ymax - ymin)) * (terrain.height - 1)));
+  const c0 = Math.floor(fx), r0 = Math.floor(fy);
+  const c1 = Math.min(terrain.width - 1, c0 + 1), r1 = Math.min(terrain.height - 1, r0 + 1);
+  const tx = fx - c0, ty = fy - r0;
+  const at = (row: number, col: number) => terrain.elevations_m[row * terrain.width + col];
+  const corners = [at(r0, c0), at(r0, c1), at(r1, c0), at(r1, c1)];
+  if (corners.some(value => value == null)) return corners.find(value => value != null) ?? 0;
+  const [a, b, c, d] = corners as number[];
+  return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+}
+
+function terrainMinimum(terrain: TerrainData) {
+  let minimum = Infinity;
+  for (const value of terrain.elevations_m) if (value != null && value < minimum) minimum = value;
+  return Number.isFinite(minimum) ? minimum : 0;
+}
+const minimumCache = new WeakMap<TerrainData, number>();
+function baseHeight(terrain: TerrainData) {
+  let value = minimumCache.get(terrain);
+  if (value == null) { value = terrainMinimum(terrain); minimumCache.set(terrain, value); }
+  return value;
+}
+
+function insideTerrain(terrain: TerrainData, x: number, y: number) {
+  const [xmin, ymin, xmax, ymax] = terrain.extent_m;
+  return x >= xmin && x <= xmax && y >= ymin && y <= ymax;
 }
 
 /** Scene-space direction (x east-ish, y up, z = −projected y) toward a body, with the terrain's height scale. */
@@ -176,10 +189,11 @@ function sceneDirection(longitudeDeg: number, azimuthDeg: number, elevationDeg: 
 }
 
 /** Light the terrain from where the Sun really is at this time, with cast shadows. */
-function SunLight({ terrain, sample, longitudeDeg }: { terrain: TerrainData; sample: TimeSample; longitudeDeg: number }) {
+function SunLight({ terrain, sample, longitudeDeg, frame }: { terrain: TerrainData; sample: TimeSample; longitudeDeg: number; frame?: { x: number; z: number; spanKm: number } }) {
   const [xmin, ymin, xmax, ymax] = terrain.extent_m;
-  const cx = (xmin + xmax) / 2000, cz = -(ymin + ymax) / 2000;
-  const half = Math.max(xmax - xmin, ymax - ymin) / 2000 * 1.2;
+  const cx = frame?.x ?? (xmin + xmax) / 2000, cz = frame?.z ?? -(ymin + ymax) / 2000;
+  // Fit the shadow camera to what is on screen, not the whole map: sharper shadows, less work per frame.
+  const half = (frame?.spanKm ?? Math.max(xmax - xmin, ymax - ymin) / 1000) / 2 * 1.25;
   // Keep the light a hair above the ground plane so a grazing Sun still shades slopes.
   const dir = sceneDirection(longitudeDeg, sample.sun_azimuth_deg, Math.max(.4, sample.sun_elevation_deg), terrain.crs);
   const position = new THREE.Vector3(cx, 0, cz).add(dir.clone().multiplyScalar(half * 2));
@@ -189,10 +203,22 @@ function SunLight({ terrain, sample, longitudeDeg }: { terrain: TerrainData; sam
   return <>
     <primitive object={target} />
     <directionalLight castShadow position={position} target={target} intensity={up ? 2.6 : .35} color="#fff4dc"
-      shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-bias={-0.0004} shadow-normalBias={0.04}
+      shadow-mapSize-width={1024} shadow-mapSize-height={1024} shadow-bias={-0.0005} shadow-normalBias={0.03}
       shadow-camera-left={-half} shadow-camera-right={half} shadow-camera-top={half} shadow-camera-bottom={-half}
-      shadow-camera-near={0.1} shadow-camera-far={half * 5} />
+      shadow-camera-near={0.05} shadow-camera-far={half * 5} />
   </>;
+}
+
+/** Point the camera at the focus once per focus change, so orbiting is never yanked back. */
+function Controls({ target, minDistance, maxDistance }: { target: [number, number, number]; minDistance: number; maxDistance: number }) {
+  const controls = useRef<OrbitControlsImpl>(null);
+  const key = target.map(value => value.toFixed(3)).join(",");
+  useEffect(() => {
+    controls.current?.target.set(...target);
+    controls.current?.update();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return <OrbitControls ref={controls} makeDefault enableDamping={false} minDistance={minDistance} maxDistance={maxDistance} maxPolarAngle={Math.PI / 2.05} />;
 }
 
 /**
@@ -247,7 +273,7 @@ function SightLines({ terrain, site, sample, base, markerSize }: { terrain: Terr
 function markerScale(terrain: TerrainData, override?: number) {
   if (override) return override;
   const spanKm = Math.max(terrain.extent_m[2] - terrain.extent_m[0], terrain.extent_m[3] - terrain.extent_m[1]) / 1000;
-  return Math.max(1, spanKm / 40);
+  return Math.max(.25, spanKm / 40);
 }
 
 /** Two small dots over a pin: Sun and Earth, lit when in view at the current time. */
@@ -309,8 +335,8 @@ function TerrainMesh({
     const values = elevations_m.filter(
       (x): x is number => x != null && Number.isFinite(x),
     );
-    const minimum = Math.min(...values),
-      maximum = Math.max(...values);
+    let minimum = Infinity, maximum = -Infinity;
+    for (const value of values) { if (value < minimum) minimum = value; if (value > maximum) maximum = value; }
     const positions = new Float32Array(width * height * 3);
     const colors = new Float32Array(width * height * 3);
     const indices: number[] = [];
@@ -483,11 +509,24 @@ export function FlatMap({
   onSelect: (id: string) => void;
 } & LayerOptions) {
   const [xmin, ymin, xmax, ymax] = terrain.extent_m;
-  const values = terrain.elevations_m.filter((v): v is number => v != null),
-    min = Math.min(...values),
-    max = Math.max(...values);
   const { left, top, span } = comparisonFrame(terrain, comparisonSites);
   const scale = span / 600;
+  // One shaded-relief bitmap instead of an SVG rect per DEM cell (tens of thousands at 80 m/px).
+  const relief = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = terrain.width; canvas.height = terrain.height;
+    const context = canvas.getContext("2d");
+    if (!context) return "";
+    let min = Infinity, max = -Infinity;
+    for (const value of terrain.elevations_m) if (value != null) { if (value < min) min = value; if (value > max) max = value; }
+    const image = context.createImageData(terrain.width, terrain.height);
+    terrain.elevations_m.forEach((height, i) => {
+      const shade = height == null ? 0 : Math.round(255 * (12 + ((height - min) / Math.max(1, max - min)) * 45) / 100);
+      image.data.set([shade, shade, shade, height == null ? 0 : 255], i * 4);
+    });
+    context.putImageData(image, 0, 0);
+    return canvas.toDataURL();
+  }, [terrain]);
   return (
     <div className="flat-map">
       <svg
@@ -495,18 +534,7 @@ export function FlatMap({
         aria-label={previewPoint ? "Local coarse terrain centered on the selected global point" : "Top-down terrain map with candidate locations"}
         role={comparisonSites?.length ? "group" : "img"}
       >
-        {terrain.elevations_m.map((height, i) =>
-          height == null ? null : (
-            <rect
-              key={i}
-              x={((i % terrain.width) / terrain.width) * 600}
-              y={(Math.floor(i / terrain.width) / terrain.height) * 600}
-              width={600 / terrain.width + 0.5}
-              height={600 / terrain.height + 0.5}
-              fill={`hsl(0 0% ${12 + ((height - min) / Math.max(1, max - min)) * 45}%)`}
-            />
-          ),
-        )}
+        {relief && <image href={relief} x="0" y="0" width="600" height="600" preserveAspectRatio="none" style={{ imageRendering: "auto" }} />}
         {layer === "psr" &&
           psr &&
           psr.psr_fraction.map((fraction, i) =>
@@ -617,7 +645,6 @@ export function TerrainScene({
   onSelect: (id: string) => void;
   mode: "terrain" | "map";
 } & LayerOptions) {
-  const elevation = layer === "elevation";
   const [xmin, ymin, xmax, ymax] = terrain.extent_m;
   const spanKm = Math.max(
     xmax - xmin,
@@ -640,7 +667,6 @@ export function TerrainScene({
     />
   );
   const legend = layer === "suitability" ? <SuitabilityLegend /> : null;
-  if (mode === "map") return <>{flat}{legend}</>;
   const lightSite = candidates.find(site => site.id === selected) ?? candidates[0];
   const focusSite = sample ? candidates.find(site => site.id === selected) : undefined;
   const sharedFrame = comparisonSites && comparisonSites.length > 1 ? comparisonFrame(terrain, comparisonSites) : null;
@@ -649,26 +675,35 @@ export function TerrainScene({
     y_m: ymax - (sharedFrame.top + sharedFrame.span / 2) / 600 * (ymax - ymin),
   } : focusSite;
   const focusSpan = sharedFrame ? spanKm * sharedFrame.span / 600 : Math.min(spanKm, 40);
-  let minimum = Infinity;
-  if (focusPoint) for (const v of terrain.elevations_m) if (v != null && v < minimum) minimum = v;
+  const minimum = baseHeight(terrain);
+  const reliefKm = useMemo(() => {
+    let maximum = -Infinity;
+    for (const value of terrain.elevations_m) if (value != null && value > maximum) maximum = value;
+    return Number.isFinite(maximum) ? (maximum - baseHeight(terrain)) / 1000 * HEIGHT_SCALE : 0;
+  }, [terrain]);
   const focus: [number, number, number] | undefined = focusPoint
     ? [focusPoint.x_m / 1000, ((heightAt(terrain, focusPoint.x_m, focusPoint.y_m) - minimum) / 1000) * HEIGHT_SCALE, -focusPoint.y_m / 1000]
     : undefined;
-  const markerSize = sharedFrame ? Math.max(.5, focusSpan * 1.5 / 40) : focus ? 1.5 : undefined;
+  const markerSize = sharedFrame ? Math.max(.25, focusSpan * 1.5 / 40) : focus ? Math.max(.3, Math.min(1.5, focusSpan / 12)) : undefined;
   const sunSample = sample && lightSite?.timeline.length
     ? lightSite.timeline[sampleIndexAt(lightSite.timeline, sample.time_utc)] ?? sample
     : sample;
+  const visibleCandidates = useMemo(() => candidates.filter(site => insideTerrain(terrain, site.x_m, site.y_m)), [candidates, terrain]);
+  const visiblePoints = useMemo(() => mapCandidates.filter(point => insideTerrain(terrain, point.x_m, point.y_m)), [mapCandidates, terrain]);
+  const shadowFrame = focus ? { x: focus[0], z: focus[2], spanKm: Math.max(focusSpan, 2) } : undefined;
+  if (mode === "map") return <>{flat}{legend}</>;
   return (
     <SceneBoundary fallback={<><p role="status">3D terrain unavailable on this device. Showing the 2D map.</p>{flat}</>}>
       <div className="terrain-3d-frame" role="img" aria-label="Interactive 3D lunar elevation terrain. Drag to orbit; scroll or pinch to zoom.">
       <Canvas
         shadows={!!sunSample}
         frameloop="demand"
-        dpr={[1, 1.7]}
+        dpr={[1, 1.5]}
+        gl={{ antialias: true, powerPreference: "high-performance" }}
         camera={{
           position: focus
             ? [focus[0] + focusSpan * .45, focus[1] + focusSpan * .32, focus[2] + focusSpan * .5]
-            : [(xmin + xmax) / 2000 + spanKm * .7, spanKm * .65, -(ymin + ymax) / 2000 + spanKm * .8],
+            : [(xmin + xmax) / 2000 + spanKm * .45, reliefKm * .8 + spanKm * .75, -(ymin + ymax) / 2000 + spanKm * .6],
           fov: 44,
           near: 0.1,
           far: Math.max(200, spanKm * 5),
@@ -680,7 +715,7 @@ export function TerrainScene({
         {sunSample ? <>
           {/* Earthshine-level fill so shadowed ground is dark but not black. */}
           <ambientLight intensity={0.32} />
-          <SunLight terrain={terrain} sample={sunSample} longitudeDeg={lightSite?.longitude_deg_east ?? 0} />
+          <SunLight terrain={terrain} sample={sunSample} longitudeDeg={lightSite?.longitude_deg_east ?? 0} frame={shadowFrame} />
         </> : <>
           <ambientLight intensity={0.5} />
           <directionalLight
@@ -699,24 +734,19 @@ export function TerrainScene({
           studyArea={studyArea}
           onPick={onPick}
           terrain={terrain}
-          candidates={candidates}
+          candidates={visibleCandidates}
           selected={selected}
           onSelect={onSelect}
           layer={layer}
-          mapCandidates={mapCandidates}
+          mapCandidates={visiblePoints}
           psr={psr}
           features={features}
           sample={sample}
           compare={compare}
           markerSize={markerSize}
         />
-        <OrbitControls
-          makeDefault
-          target={focus ?? [(xmin + xmax) / 2000, 2, -(ymin + ymax) / 2000]}
-          minDistance={focus ? 1.5 : 6}
-          maxDistance={Math.max(55, spanKm * 3)}
-          maxPolarAngle={Math.PI / 2.05}
-        />
+        <Controls target={focus ?? [(xmin + xmax) / 2000, reliefKm * .45, -(ymin + ymax) / 2000]}
+          minDistance={focus ? Math.min(1.5, focusSpan / 12) : Math.min(6, spanKm / 6)} maxDistance={Math.max(spanKm * 3, 8)} />
       </Canvas>
       {legend}
       {sunSample && <span className="terrain-sun-note">Lit by the Sun at {sunSample.time_utc.slice(0, 16).replace("T", " ")} UTC · Sun {sunSample.sun_elevation_deg.toFixed(1)}° up · shadows move as you scrub</span>}

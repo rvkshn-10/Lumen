@@ -32,6 +32,9 @@ from app.services.suitability import LEGEND, suitability_class
 from app.services.validation import SearchValidationError, validate_search
 from app.settings import settings
 
+# Leaderboard length: spatially separated sites that get full timelines and power models.
+SHORTLIST_SIZE = max(1, min(20, int(os.getenv("LUMEN_SHORTLIST_SIZE", "10"))))
+
 METRIC_KEYS = (
     "illumination_fraction",
     "earth_visibility_fraction",
@@ -498,7 +501,7 @@ def search(request: SearchRequest, *, timings: dict | None = None, prepared=None
                 for r in selected
             ):
                 selected.append(row)
-            if len(selected) == 5:
+            if len(selected) == SHORTLIST_SIZE:
                 break
     with phase("map_sample"):
         map_ranked = [materialize(row) for row in map_sample(ranked, arrays, selected)]

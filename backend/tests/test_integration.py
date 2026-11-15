@@ -33,7 +33,7 @@ def test_real_data_search_is_reproducible_and_timeline_agrees_with_metrics():
     assert response.status_code == 200
     result = response.json()
     assert result == client.post("/api/v1/candidates/search", json=payload).json()
-    assert len(result["candidates"]) == 5
+    assert len(result["candidates"]) == search_module.SHORTLIST_SIZE
     assert result["counts"]["region"] == 1680
     assert result["provenance"]["aberration_correction"] == {"sun": "CN+S", "earth": "XCN+S"}
     for site in result["candidates"]:

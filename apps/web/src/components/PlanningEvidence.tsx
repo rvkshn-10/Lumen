@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Candidate, LunarFeature, MapLayer, PSRLayer, RegionManifest, SearchResponse, TerrainData, TimeSample } from "../lib/types";
 import { SiteAnalysis } from "./SiteAnalysis";
@@ -8,6 +8,7 @@ import { HorizonReview } from "./HorizonReview";
 import { ResultExplanation } from "./ResultExplanation";
 import { CraterInspection, isInCraterSample } from "./CraterInspection";
 import { downloadJson, downloadTimelineCsv } from "../lib/format";
+import { siteFrame, useLocalTerrain } from "../lib/local-terrain";
 import { downloadHtml, summaryHtml } from "../lib/planning";
 
 const TerrainScene = lazy(() => import("./TerrainScene").then(module => ({ default: module.TerrainScene })));
@@ -46,6 +47,7 @@ export function PlanningEvidence({ site, result, terrain, manifest, psr, feature
   const [view, setView] = useState<"map" | "terrain" | "globe" | "sky">("terrain");
   const [layer, setLayer] = useState<MapLayer>("terrain");
   const [sample, setSample] = useState<TimeSample | null>(null);
+  const siteTerrain = useLocalTerrain(useMemo(() => site.latitude_deg <= -86.9 ? siteFrame([site], 5) : null, [site]), terrain);
   return <PlanningDialog title={`Inspect ${site.rank ? `Candidate ${String(site.rank).padStart(2, "0")}` : "selected location"}`} onClose={onClose}>
     <p>{result.common_window.start_utc} to {result.common_window.end_utc} · one applied mission.</p>
     {stale && <p className="changed-notice">These details belong to the previous applied request; your edited inputs have not been analyzed.</p>}
@@ -69,7 +71,7 @@ export function PlanningEvidence({ site, result, terrain, manifest, psr, feature
               onChange={event => setSample(site.timeline[Number(event.target.value)])} />
           </label>;
         })()}
-        <div className="evidence-terrain"><Suspense fallback={<p role="status">Loading selected view…</p>}>{view === "globe" ? <GlobeScene preparedLabel={manifest?.supported_region.label} /> : view === "sky" ? site.timeline.length ? <SkyScene site={site} sample={sample ?? site.timeline[0]} /> : <p>No timeline samples are available for this sky view.</p> : terrain ? <TerrainScene terrain={terrain} candidates={result.candidates} selected={site.id} onSelect={onExplore} mode={view} layer={layer} mapCandidates={result.map_candidates ?? []} psr={psr} features={features} sample={sample ?? site.timeline[0]} compare={compare} /> : <p>Terrain display unavailable. Computed site metrics and tables remain available.</p>}</Suspense></div>
+        <div className="evidence-terrain"><Suspense fallback={<p role="status">Loading selected view…</p>}>{view === "globe" ? <GlobeScene preparedLabel={manifest?.supported_region.label} /> : view === "sky" ? site.timeline.length ? <SkyScene site={site} sample={sample ?? site.timeline[0]} /> : <p>No timeline samples are available for this sky view.</p> : siteTerrain ? <TerrainScene terrain={siteTerrain} candidates={result.candidates} selected={site.id} onSelect={onExplore} mode={view} layer={layer} mapCandidates={result.map_candidates ?? []} psr={psr} features={features} sample={sample ?? site.timeline[0]} compare={compare} /> : <p>Terrain display unavailable. Computed site metrics and tables remain available.</p>}</Suspense></div>
         <p className="field-hint">Display sampling: {terrain?.resolution_m ?? "unavailable"} m; height is exaggerated 1.5× in 3D. A display mesh does not define scientific coverage.</p>
         {result.provenance.synthetic !== true && isInCraterSample(site) ? <CraterInspection point={site} /> : null}</>}
       {tab === 6 && <><h3>Scientific exports</h3><div className="guide-actions"><button className="secondary-button" onClick={() => downloadJson(result, `lumen-${result.search_id}.json`)}>Download scientific JSON</button><button className="secondary-button" onClick={() => downloadTimelineCsv(site.timeline.map(row => ({ ...row })), `lumen-timeline-${site.id}.csv`)}>Download timeline CSV</button></div><h3>Assumptions, sampling and sources</h3><ul>{[...new Set([...result.assumptions, ...result.warnings])].map(text => <li key={text}>{text}</li>)}</ul><p><a href={site.id.startsWith("hemi-") ? "https://pds-geosciences.wustl.edu/missions/lro/lola.htm" : "https://pgda.gsfc.nasa.gov/products/90"} target="_blank" rel="noreferrer">NASA terrain source</a> · <a href="https://naif.jpl.nasa.gov/naif/data_generic.html" target="_blank" rel="noreferrer">JPL ephemeris kernels</a></p><details><summary>Complete returned provenance</summary><pre>{JSON.stringify(result.provenance, null, 2)}</pre></details></>}
