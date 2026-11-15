@@ -35,6 +35,11 @@ def fingerprint(metadata):
     return hashlib.sha256(json.dumps(metadata, sort_keys=True).encode()).hexdigest()
 
 
+def grid_digest(values):
+    """Hash decoded pixel values, independent of ZIP compression/platform."""
+    return hashlib.sha256(memoryview(np.asarray(values, dtype="<f4", order="C")).cast("B")).hexdigest()
+
+
 @lru_cache(maxsize=2)
 def _load(stamps, source_key, directory):
     del stamps
@@ -88,9 +93,13 @@ def load():
         )
         from app.global_api import global_grid
 
-        global_metadata, _ = global_grid()
-        if bundled and provenance["global_source"] != global_metadata:
-            raise DataUnavailable("Bundled survey global horizon source changed")
+        global_metadata, global_values = global_grid()
+        if bundled:
+            conventions = lambda value: {key: item for key, item in value.items() if key != "artifact_sha256"}
+            if (conventions(provenance["global_source"]) != conventions(global_metadata)
+                    or grid_digest(global_values) != provenance["global_grid_sha256"]):
+                raise DataUnavailable("Bundled survey global horizon source changed")
+            global_metadata = provenance["global_source"]
         manifest, arrays = _load(
             stamps, fingerprint({"detailed": metadata, "global": global_metadata}), directory
         )

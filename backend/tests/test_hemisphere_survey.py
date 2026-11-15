@@ -114,9 +114,10 @@ def bundled(tmp_path, monkeypatch):
     directory = tmp_path / "bundle"
     shutil.copytree(survey.BUNDLE_ROOT, directory)
     provenance = json.loads((directory / "manifest.json").read_text())
+    global_values = global_api.global_grid()[1]
     monkeypatch.setattr(survey, "ROOT", tmp_path / "missing-raw-dem")
     monkeypatch.setattr(survey, "BUNDLE_ROOT", directory)
-    monkeypatch.setattr(global_api, "global_grid", lambda: (provenance["global_source"], None))
+    monkeypatch.setattr(global_api, "global_grid", lambda: (provenance["global_source"], global_values))
     survey._load.cache_clear()
     return directory
 
@@ -146,6 +147,22 @@ def test_bundled_survey_rejects_changed_global_source(bundled, monkeypatch):
     from app import global_api
 
     monkeypatch.setattr(global_api, "global_grid", lambda: ({"changed": True}, None))
+    assert not survey.ready()
+
+
+def test_bundled_survey_accepts_different_zip_encoding_of_identical_pixels(bundled, monkeypatch):
+    from app import global_api
+
+    metadata, values = global_api.global_grid()
+    monkeypatch.setattr(global_api, "global_grid", lambda: ({**metadata, "artifact_sha256": "other-platform-zip"}, values))
+    assert survey.ready()
+
+
+def test_bundled_survey_rejects_changed_decoded_pixels(bundled, monkeypatch):
+    from app import global_api
+
+    metadata, _ = global_api.global_grid()
+    monkeypatch.setattr(global_api, "global_grid", lambda: (metadata, np.zeros((2, 4))))
     assert not survey.ready()
 
 

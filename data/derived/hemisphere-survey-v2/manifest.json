@@ -50,5 +50,6 @@
     ],
     "pixel_registration": "pixel_centers",
     "elevation_conversion": "unsigned TIFF value * 0.5 - 10000 metres"
-  }
+  },
+  "global_grid_sha256": "8a387f54ccf2eaa2b660bb6ff871b1b3877ab9c998e7642b694cf391335afb01"
 }
