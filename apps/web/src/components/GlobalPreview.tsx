@@ -3,6 +3,7 @@ import type { TerrainData, TimeSample } from "../lib/types";
 import { downloadJson } from "../lib/format";
 import { withinSearchDeadline } from "../lib/deadline";
 import "./global-preview.css";
+import { queueFetch } from "../lib/queue-fetch";
 
 const TerrainScene = lazy(() => import("./TerrainScene").then(m => ({ default: m.TerrainScene })));
 type Overview = { width: number; height: number; elevations_m: number[] };
@@ -109,7 +110,7 @@ export function GlobalPreview() {
     const abort = new AbortController(); controller.current = abort;
     setLoading(true); setError(null);
     try {
-      const next = await withinSearchDeadline(abort.signal, async signal => json<Preview>(await fetch(`${API}/global/preview`, {
+      const next = await withinSearchDeadline(abort.signal, async signal => json<Preview>(await queueFetch(`${API}/global/preview`, {
         method: "POST", headers: { "Content-Type": "application/json" }, signal,
         body: JSON.stringify({ coordinate: { latitude_deg: latitude, longitude_deg_east: longitude },
           time_range: { start_utc: new Date(`${start}Z`).toISOString(), end_utc: new Date(`${end}Z`).toISOString() } }),

@@ -177,7 +177,7 @@
 .analysis-status.failed, .analysis-status.expired, .analysis-status.outside { background: var(--surface-raised); border-color: var(--line-strong); }
 .analysis-status.queued, .analysis-status.queue_full, .analysis-status.waking { background: var(--surface-raised); border-color: var(--line-strong); }
 .applied-mission-tools .guide-actions { margin: 8px 0 0; }
-.planning-dialog { width: min(1160px, calc(100vw - 40px)); max-width: none; max-height: 92dvh; padding: 28px; color: var(--text-primary); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: auto; overscroll-behavior: contain; }
+.planning-dialog { text-align: start; justify-items: stretch; width: min(1160px, calc(100vw - 40px)); max-width: none; max-height: 92dvh; padding: 28px; color: var(--text-primary); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: auto; overscroll-behavior: contain; }
 .planning-dialog::backdrop { background: #000a; }
 .planning-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 18px; }
 .planning-dialog-header h2 { font-size: 23px; margin: 0; }

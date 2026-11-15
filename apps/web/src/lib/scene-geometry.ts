@@ -30,7 +30,26 @@ export interface SceneSample {
 }
 export interface SceneEphemeris { samples: SceneSample[]; provenance: { source: string; limits: string } }
 
+// Equirectangular pixels get extremely thin near the poles (at 89.9°S one
+// 0.25° pixel is ~7.5 km tall but ~13 m wide), so neighbouring longitudes jump
+// between unrelated heights and the exaggerated mesh turns into radial shards.
+// Near the poles, average along longitude over a ground distance equal to one
+// pixel's height, which makes the sampling roughly isotropic.
+const POLAR_SMOOTHING_FROM_DEG = 87.5;
 export function sampleHeight(grid: Int16Array, lat: number, lon: number, width = 1440, height = 720) {
+  if (Math.abs(lat) > POLAR_SMOOTHING_FROM_DEG && Math.abs(lat) < 89.999999) {
+    const rowDeg = 180 / height;
+    const span = Math.min(360, rowDeg / Math.max(1e-6, Math.cos(lat * Math.PI / 180)));
+    const fade = Math.min(1, (Math.abs(lat) - POLAR_SMOOTHING_FROM_DEG) / 1.5);
+    const taps = 9;
+    let sum = 0;
+    for (let k = 0; k < taps; k++) sum += sampleGrid(grid, lat, lon + (k / (taps - 1) - .5) * span * fade, width, height);
+    return sum / taps;
+  }
+  return sampleGrid(grid, lat, lon, width, height);
+}
+function sampleGrid(grid: Int16Array, lat: number, lon: number, width: number, height: number) {
+  lon = ((lon + 180) % 360 + 360) % 360 - 180;
   const row = Math.max(0, Math.min(height - 1, (90 - lat) / 180 * height - .5));
   const col = ((lon + 180) / 360 * width - .5 + width) % width;
   const r = Math.floor(row), c = Math.floor(col), r2 = Math.min(height - 1, r + 1), c2 = (c + 1) % width;

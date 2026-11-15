@@ -170,6 +170,28 @@ async def replay(site_id: str, request: Request, payload: ReplayRequest | None =
         "site_id": site_id, **(payload or ReplayRequest()).model_dump(mode="json")}, request))
 
 
+TRAJECTORY_ROOT = REPOSITORY_ROOT / "data" / "derived" / "nasa-trajectories"
+
+
+@router.get("/historic/{site_id}/trajectory")
+async def historic_trajectory(site_id: str):
+    """NASA-published trajectory for a historic lander, or 404 when NASA has none.
+
+    Files are produced by scripts/fetch_nasa_trajectories.py from the NASA PDS/NAIF
+    CLPS SPICE archive and the NASA JPL Horizons API. Nothing is synthesized here.
+    """
+    if not any(s["id"] == site_id and s["kind"] == "historic" for s in curated_catalog()["sites"]):
+        raise HTTPException(404, "Unknown historic landing.")
+    path = TRAJECTORY_ROOT / f"{site_id}.json"
+    if not path.is_file():
+        raise HTTPException(404, {
+            "code": "no_nasa_trajectory",
+            "message": "NASA has not published a trajectory for this lander in the sources Lumen uses "
+                       "(NASA PDS/NAIF SPICE archives and JPL Horizons), so no path is drawn.",
+        })
+    return JSONResponse(json.loads(path.read_text()), headers={"Cache-Control": "public, max-age=86400"})
+
+
 def replay_calculation(site_id: str, payload: ReplayRequest):
     try:
         serialized, identity = payload.model_dump_json(), source_identity(polar=False)

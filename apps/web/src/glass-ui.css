@@ -1,0 +1,286 @@
+/*
+ * Lumen glass — translucent panels and controls with a lit rim.
+ *
+ * Each glass element gets: a translucent fill, a backdrop blur, a bright
+ * top-left rim that fades toward the bottom (light from above), a faint inner
+ * glow and a soft outer halo. Built from box-shadows and backgrounds only (no
+ * ::before/::after), so it doesn't collide with existing pseudo-elements.
+ * Loaded after liquid-glass.css.
+ */
+
+:root {
+  --lg-tint: 255 255 255;               /* rim and sheen colour */
+  --lg-halo: 120 140 170;               /* outer glow, cool moonlight */
+  --lg-fill: color-mix(in srgb, var(--surface-raised) 62%, transparent);
+  --lg-fill-strong: color-mix(in srgb, var(--surface-raised) 80%, transparent);
+  --lg-rim: rgb(var(--lg-tint) / .9);
+  --lg-rim-soft: rgb(0 0 0 / .08);
+  --lg-blur: blur(22px) saturate(1.6);
+  --lg-sheen: linear-gradient(180deg, rgb(var(--lg-tint) / .55), rgb(var(--lg-tint) / .12) 42%, rgb(var(--lg-tint) / 0) 100%);
+  --lg-edge:
+    inset 0 1px 0 0 var(--lg-rim),
+    inset 1px 0 0 0 rgb(var(--lg-tint) / .45),
+    inset -1px 0 0 0 rgb(var(--lg-tint) / .2),
+    inset 0 -1px 0 0 var(--lg-rim-soft),
+    inset 0 0 0 1px rgb(0 0 0 / .06);
+  --lg-glow: 0 1px 2px rgb(0 0 0 / .06), 0 8px 28px -6px rgb(var(--lg-halo) / .28);
+  --lg-glow-hover: 0 1px 2px rgb(0 0 0 / .08), 0 10px 34px -4px rgb(var(--lg-halo) / .42), 0 0 0 1px rgb(var(--lg-tint) / .25);
+  --lg-page:
+    radial-gradient(70rem 40rem at 50% -12rem, rgb(214 222 236 / .7), transparent 70%),
+    radial-gradient(40rem 30rem at 100% 30%, rgb(206 222 236 / .45), transparent 70%);
+}
+
+:root[data-appearance="dark"] {
+  --lg-tint: 255 255 255;
+  --lg-halo: 150 180 225;
+  --lg-fill: color-mix(in srgb, var(--surface-raised) 52%, transparent);
+  --lg-fill-strong: color-mix(in srgb, var(--surface-raised) 74%, transparent);
+  --lg-rim: rgb(var(--lg-tint) / .34);
+  --lg-rim-soft: rgb(var(--lg-tint) / .05);
+  --lg-sheen: linear-gradient(180deg, rgb(var(--lg-tint) / .1), rgb(var(--lg-tint) / .025) 45%, rgb(var(--lg-tint) / 0) 100%);
+  --lg-edge:
+    inset 0 1px 0 0 var(--lg-rim),
+    inset 1px 0 0 0 rgb(var(--lg-tint) / .14),
+    inset -1px 0 0 0 rgb(var(--lg-tint) / .07),
+    inset 0 -1px 0 0 var(--lg-rim-soft),
+    inset 0 0 0 1px rgb(var(--lg-tint) / .06),
+    inset 0 0 18px 0 rgb(var(--lg-tint) / .025);
+  --lg-glow: 0 1px 2px rgb(0 0 0 / .5), 0 10px 30px -8px rgb(var(--lg-halo) / .22);
+  --lg-glow-hover: 0 1px 2px rgb(0 0 0 / .5), 0 12px 36px -6px rgb(var(--lg-halo) / .38), 0 0 0 1px rgb(var(--lg-tint) / .12);
+  --lg-page:
+    radial-gradient(70rem 40rem at 50% -14rem, rgb(120 140 175 / .2), transparent 70%),
+    radial-gradient(45rem 32rem at 105% 40%, rgb(70 110 160 / .12), transparent 70%),
+    radial-gradient(40rem 30rem at -5% 85%, rgb(150 150 170 / .07), transparent 70%);
+}
+
+/* Faint ambient light behind the page so the glass has something to refract. */
+#top { background: var(--lg-page), var(--app-background); background-attachment: fixed; }
+
+/* ---------- Panels ("sides") ---------- */
+.planner-masthead,
+.area-setup,
+.area-editor[open] > .area-editor-content,
+.planning-dialog,
+.methods-dialog,
+.coarse-area-preview,
+.compare-disclosure,
+details.copilot-explanation,
+details.scenario-limitations,
+.scenario-chart-section,
+.compare-launch-section,
+.solar-generation,
+.advanced-mission,
+.review-facts,
+.compare-menu,
+.changed-notice,
+.clps-mission-card,
+.compare-values-scroll,
+.scenario-board .table-scroll,
+.guided-planner :is(.orbital-toolbar, .orbital-timeline),
+.scene-readout {
+  background: var(--lg-sheen), var(--lg-fill);
+  border: 0;
+  box-shadow: var(--lg-edge), var(--lg-glow);
+  -webkit-backdrop-filter: var(--lg-blur);
+  backdrop-filter: var(--lg-blur);
+}
+
+.area-setup,
+.coarse-area-preview,
+.compare-disclosure,
+details.copilot-explanation,
+details.scenario-limitations,
+.scenario-chart-section,
+.compare-launch-section,
+.solar-generation,
+.advanced-mission,
+.review-facts,
+.clps-mission-card,
+.compare-values-scroll,
+.scenario-board .table-scroll { border-radius: 22px; }
+
+/* Let the table's own header fill sit inside the glass instead of covering its rim. */
+.compare-values-scroll :is(table, thead, tr, th, td),
+.scenario-board .table-scroll :is(table, thead, tr, th, td) { background-color: transparent; }
+.compare-values-scroll tr:last-child :is(th, td) { border-bottom: 0; }
+
+.area-setup { padding: .55rem 1rem; }
+.area-editor[open] > .area-editor-content { border-radius: 18px; padding: 1rem; margin-top: .35rem; }
+.coarse-area-preview,
+.scenario-chart-section,
+.compare-launch-section,
+.solar-generation { padding: clamp(1rem, 2.5vw, 1.5rem); }
+.compare-disclosure,
+details.copilot-explanation,
+details.scenario-limitations,
+.advanced-mission { padding: .35rem 1rem; margin-block: .75rem; }
+.review-facts { padding: 1rem 1.25rem; }
+.clps-mission-card { padding: 1rem; border-top: 0; }
+.compare-menu { border-radius: 16px; }
+.changed-notice { border-radius: 14px; }
+
+/* The masthead is a bar, not a card: keep it flat at the edges. */
+.planner-masthead {
+  border-radius: 0;
+  background: var(--lg-sheen), var(--lg-fill-strong);
+  box-shadow: inset 0 -1px 0 0 rgb(var(--lg-tint) / .08), 0 8px 24px -16px rgb(0 0 0 / .6);
+}
+
+.planning-dialog,
+.methods-dialog {
+  background: var(--lg-sheen), var(--lg-fill-strong);
+  box-shadow: var(--lg-edge), 0 30px 80px -20px rgb(0 0 0 / .7), 0 0 60px -10px rgb(var(--lg-halo) / .18);
+}
+
+/* ---------- Buttons ---------- */
+.primary-button,
+.secondary-button,
+.glass-button,
+.curated-picker button,
+.guided-planner .scene-view-tabs > button,
+.guided-planner .scene-tools > button,
+.guided-planner .scene-navigation > button {
+  position: relative;
+  border: 0;
+  box-shadow: var(--lg-edge), var(--lg-glow);
+  transition: box-shadow 180ms ease, background-color 180ms ease, color 180ms ease, scale 140ms ease;
+}
+
+.secondary-button,
+.glass-button,
+.curated-picker button,
+.guided-planner .scene-view-tabs > button,
+.guided-planner .scene-tools > button,
+.guided-planner .scene-navigation > button {
+  background: var(--lg-sheen), var(--lg-fill);
+  -webkit-backdrop-filter: var(--lg-blur);
+  backdrop-filter: var(--lg-blur);
+}
+
+/* Primary keeps its solid ink so the main action stays obvious, with a lit lip. */
+.primary-button {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / .22), rgb(255 255 255 / 0) 55%),
+    var(--action-fill);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / .45),
+    inset 0 -1px 0 0 rgb(0 0 0 / .18),
+    0 1px 2px rgb(0 0 0 / .25),
+    0 8px 26px -6px rgb(var(--lg-halo) / .45);
+}
+
+:is(.secondary-button, .glass-button, .curated-picker button,
+  .guided-planner .scene-view-tabs > button, .guided-planner .scene-tools > button,
+  .guided-planner .scene-navigation > button):hover:not(:disabled) {
+  background: var(--lg-sheen), var(--lg-fill-strong);
+  box-shadow: var(--lg-edge), var(--lg-glow-hover);
+}
+.primary-button:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / .3), rgb(255 255 255 / 0) 55%),
+    var(--action-hover);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / .55),
+    inset 0 -1px 0 0 rgb(0 0 0 / .18),
+    0 1px 2px rgb(0 0 0 / .25),
+    0 10px 34px -4px rgb(var(--lg-halo) / .6);
+}
+
+/* Selected toggles read as lit glass rather than solid ink. */
+.curated-picker button[aria-pressed="true"],
+.guided-planner .scene-view-tabs > button[aria-pressed="true"],
+.guided-planner .scene-tools > button[aria-pressed="true"],
+.guided-planner .scene-navigation > button[aria-pressed="true"] {
+  background: linear-gradient(180deg, rgb(255 255 255 / .28), rgb(255 255 255 / .06)), var(--action-fill);
+  color: var(--action-text);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / .55), 0 0 0 1px rgb(var(--lg-tint) / .18), 0 0 22px -2px rgb(var(--lg-halo) / .55);
+}
+
+:is(.primary-button, .secondary-button, .glass-button):disabled {
+  box-shadow: var(--lg-edge);
+  opacity: .55;
+}
+
+.curated-picker > button.text-button {
+  border-radius: 999px;
+  padding: 9px 18px;
+  min-height: 42px;
+  text-decoration: none;
+}
+
+/* ---------- Fields ---------- */
+.field :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+  background: var(--lg-sheen), var(--lg-fill);
+  border-color: transparent;
+  box-shadow: var(--lg-edge);
+  border-radius: 12px;
+  transition: box-shadow 160ms ease;
+}
+.field :is(input, select, textarea):focus-visible {
+  box-shadow: var(--lg-edge), 0 0 0 3px rgb(var(--lg-halo) / .45);
+}
+
+/* ---------- Motion and accessibility ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .primary-button, .secondary-button, .glass-button, .curated-picker button,
+  .field :is(input, select, textarea) { transition: none; }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root, :root[data-appearance="dark"] {
+    --lg-fill: var(--surface-raised);
+    --lg-fill-strong: var(--surface-raised);
+    --lg-sheen: linear-gradient(transparent, transparent);
+    --lg-blur: none;
+    --lg-page: linear-gradient(transparent, transparent);
+  }
+  :is(.area-setup, .coarse-area-preview, .compare-disclosure, .planning-dialog, .secondary-button, .glass-button) {
+    box-shadow: inset 0 0 0 1px var(--line-strong);
+  }
+}
+
+@media print {
+  #top { background: white; }
+  .planner-masthead, .area-setup, .coarse-area-preview, .compare-disclosure, .scenario-chart-section,
+  .solar-generation, .advanced-mission, .review-facts, .clps-mission-card,
+  .primary-button, .secondary-button {
+    background: white; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; border: 1px solid #ccc;
+  }
+}
+
+/* ---------- 3D viewers ----------
+   Every Moon and terrain viewer is a framed window with a lit rim and a soft
+   glow, so its dark scene never melts into a dark page or panel. The rim is an
+   overlay because the canvas would cover an inset shadow. */
+.terrain-3d-frame,
+.orbital-scene:not(.immersive):not(:fullscreen) {
+  position: relative;
+  border: 0;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / .45),
+    0 18px 48px -20px rgb(0 0 0 / .8),
+    0 0 56px -14px rgb(var(--lg-halo) / .34);
+}
+.terrain-3d-frame::after,
+.orbital-scene:not(.immersive):not(:fullscreen)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / .26),
+    inset 0 0 0 1px rgb(255 255 255 / .13),
+    inset 0 -1px 0 0 rgb(255 255 255 / .05);
+}
+.guided-planner .area-scene .orbital-scene:not(.immersive):not(:fullscreen) { border-radius: 24px; }
+
+/* Match the other glass disclosures' summary rows. */
+details:is(.copilot-explanation, .scenario-limitations) > summary {
+  padding-block: .7rem;
+  font-weight: 650;
+  cursor: pointer;
+}

@@ -10,6 +10,7 @@ import type {
   TimeSample,
 } from "./types";
 import type { BriefInterpretation } from "./brief";
+import { queueFetch } from "./queue-fetch";
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
 export function getFeatures(signal?: AbortSignal): Promise<FeatureCollection> {
@@ -27,7 +28,7 @@ export function getSiteAnalysis(
   includeAlternatives = true,
 ): Promise<SiteDetail> {
   const analysisUrl = `${API_BASE}/sites/${encodeURIComponent(id)}/analysis`;
-  return fetch(includeAlternatives ? analysisUrl : `${analysisUrl}?include_alternatives=false`, {
+  return queueFetch(includeAlternatives ? analysisUrl : `${analysisUrl}?include_alternatives=false`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),

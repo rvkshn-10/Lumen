@@ -116,10 +116,10 @@ def main():
             applied = submitted[-1]
             assert 1 <= applied["search_radius_km"] <= 5
             page.get_by_role("button", name="Exit full screen", exact=False).click()
-            if not page.locator("details.area-editor").evaluate(
+            if not page.locator("details.area-inputs").evaluate(
                 "element => element.open"
             ):
-                page.locator("details.area-editor > summary").click()
+                page.locator("details.area-inputs > summary").click()
             expect(
                 page.get_by_label("Detailed search radius (km)", exact=False)
             ).to_have_value(str(applied["search_radius_km"]))

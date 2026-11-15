@@ -29,10 +29,10 @@ def main():
             page.wait_for_timeout(1500)
             page.get_by_role("button", name="Full screen", exact=False).click()
             page.wait_for_timeout(1500)
-            if not page.locator("details.area-editor").evaluate("el => el.open"):
+            if not page.locator("details.area-inputs").evaluate("el => el.open"):
                 # Exit fullscreen temporarily to use the site picker.
                 page.get_by_role("button", name="Exit full screen", exact=False).click()
-                page.locator("details.area-editor > summary").click()
+                page.locator("details.area-inputs > summary").click()
             elif page.evaluate("!!document.fullscreenElement"):
                 page.get_by_role("button", name="Exit full screen", exact=False).click()
             page.get_by_role("button", name="Find a place", exact=True).click()
@@ -59,6 +59,7 @@ def main():
             page.clock.resume()
             assert before != middle != after, "Site navigation must render intermediate motion"
             page.screenshot(path=str(output / f"site-focus-{width}.png"))
+            page.locator(".context-sky-tool > summary").click()
             page.get_by_role("button", name="View from site", exact=True).click()
             expect(page.locator(".site-sky-context")).to_contain_text("43.30°S")
             expect(page.locator(".site-sky-readings")).to_contain_text("bearing")

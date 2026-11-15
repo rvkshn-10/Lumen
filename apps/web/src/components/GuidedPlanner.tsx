@@ -89,6 +89,10 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
   }, [catalog, regionKey, coverageRefresh]);
 
   const stale = !!result && canonical(draft) !== canonical(result.request);
+  // Keep the area controls laid out like the last result while a new area is checked.
+  const lastCoverage = useRef(coverage);
+  if (coverage) lastCoverage.current = coverage;
+  const shownCoverage = coverage ?? (coveragePending ? lastCoverage.current : null);
   const areaReady = !!catalog && !coveragePending && coverage && coverage.status !== "outside" && (coverage.status !== "partial" || acknowledged);
   const radiusExceedsLimit = !!catalog && draft.region.selector_type !== "full_supported_region" && draft.region.selector_type !== "southern_hemisphere" && (draft.region.search_radius_km ?? 0) > catalog.public_limits.maximum_radius_km;
   const canShowDemo = import.meta.env.VITE_LUMEN_MOCK !== "1" && catalog?.geometry.type === "cap";
@@ -98,6 +102,7 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
   const requiredLimits = review ? appliedConstraints(draft) : [];
   function update(request: SearchRequest) {
     if (busy) { version.current++; requestController.current?.abort(); setBusy(false); setState({ phase: "canceled", message: "The request was canceled because its inputs changed. Your previous applied results are retained." }); }
+    if (canonical(request.region) !== regionKey) { setCoverage(null); setCoverageError(null); setCoveragePending(true); setAcknowledged(false); }
     setDraft(structuredClone(request)); setReview(false); setValidation([]);
   }
   function go(next: number) {
@@ -211,9 +216,9 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
         </div>
       </header>
       <VerifiedArea terrain={terrain} catalog={catalog} request={draft} features={features} outcome={coverage} pending={coveragePending} error={coverageError} onChange={update} onRetry={() => setCoverageRefresh(value => value + 1)} actions={<>
-        {coverage?.status === "partial" && <label className="coverage-ack"><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} />Analyze the covered portion of this area.</label>}
+        {shownCoverage?.status === "partial" && <label className="coverage-ack"><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} />Analyze the covered portion of this area.</label>}
         {radiusExceedsLimit && <p className="guide-error">Choose a radius of {catalog.public_limits.maximum_radius_km} km or less, or select the full-region demo.</p>}
-        <button hidden={coverage?.status === "outside"} className="primary-button" disabled={!areaReady || radiusExceedsLimit} onClick={continueToMission}>Continue to mission <Icon name="arrow" size={16} /></button>
+        <button hidden={shownCoverage?.status === "outside"} className="primary-button" disabled={!areaReady || radiusExceedsLimit} onClick={continueToMission}>Continue to mission <Icon name="arrow" size={16} /></button>
       </>} />
     </section>}
     {catalog && step === 2 && <section className="guide-stage guide-mission-stage">
