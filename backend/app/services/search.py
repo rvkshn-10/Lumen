@@ -177,6 +177,44 @@ def _longest_runs(states: np.ndarray, hours: np.ndarray) -> tuple[np.ndarray, np
     return np.round(visible, 9), np.round(blocked, 9)
 
 
+@lru_cache(maxsize=8)
+def _step_hours(times: tuple) -> np.ndarray:
+    """Sample durations in hours; identical to the per-batch calculation, computed once per grid."""
+    hours = np.array([(b - a).total_seconds() / 3600 for a, b in pairwise(times)])
+    hours.setflags(write=False)
+    return hours
+
+
+def search_threads() -> int:
+    """Worker threads for temporal batches. NumPy releases the GIL inside each kernel."""
+    try:
+        return max(1, int(os.getenv("LUMEN_SEARCH_THREADS", "0")) or min(8, os.cpu_count() or 1))
+    except ValueError:
+        return 1
+
+
+def evaluate_many(arrays: dict, indices, times, sun, earth, batch: int = 32) -> list[dict]:
+    """Per-site metrics for many sites.
+
+    Every site is still evaluated by the same batch function with the same batch
+    boundaries, so results are bit-for-bit identical to the serial loop; the
+    batches simply run on several cores.
+    """
+    indices = np.asarray(indices)
+    chunks = [indices[offset : offset + batch] for offset in range(0, len(indices), batch)]
+    threads = min(search_threads(), len(chunks))
+    if threads <= 1:
+        rows = []
+        for chunk in chunks:
+            rows.extend(evaluate_metrics(arrays, chunk, times, sun, earth))
+        return rows
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=threads, thread_name_prefix="lumen-temporal") as pool:
+        parts = list(pool.map(lambda chunk: evaluate_metrics(arrays, chunk, times, sun, earth), chunks))
+    return [row for part in parts for row in part]
+
+
 def analyze_batch(arrays: dict, indices: np.ndarray, times, sun, earth) -> list[dict]:
     """Evaluate a bounded group of sites on the same scientific time grid."""
     lat = np.deg2rad(arrays["lat_deg"][indices])
@@ -217,7 +255,7 @@ def analyze_batch(arrays: dict, indices: np.ndarray, times, sun, earth) -> list[
     sun_radius = np.rad2deg(np.arcsin(SUN_RADIUS_KM / sun_distance))
     sunlight = sun_elevation + sun_radius > sun_horizon
     communication = earth_elevation > earth_horizon
-    hours = np.array([(b - a).total_seconds() / 3600 for a, b in pairwise(times)])
+    hours = _step_hours(tuple(times))
     total_hours = hours.sum()
     illumination = np.sum(sunlight[:, :-1] * hours, axis=1) / total_hours
     visibility = np.sum(communication[:, :-1] * hours, axis=1) / total_hours
@@ -274,11 +312,7 @@ def cached_metrics(
         except (OSError, ValueError, KeyError):
             pass  # A stale or damaged optional cache cannot change science results.
     times, sun, earth = body_positions(settings.kernel_root, start, end, 5)
-    rows = []
-    for offset in range(0, len(indices), 64):
-        batch = np.asarray(indices[offset : offset + 64], dtype=np.int32)
-        rows.extend(evaluate_metrics(arrays, batch, times, sun, earth))
-    return tuple(rows)
+    return tuple(evaluate_many(arrays, np.asarray(indices, dtype=np.int32), times, sun, earth, batch=64))
 
 
 def temporal_cache_path(
@@ -471,9 +505,7 @@ def search(request: SearchRequest, *, timings: dict | None = None, prepared=None
     with phase("cached_metrics"):
         artifact_fingerprint = dataset_fingerprint(metadata, arrays)
         if prepared is not None:
-            metrics_rows = []
-            for offset in range(0,len(indices),32):
-                metrics_rows.extend(evaluate_metrics(arrays,indices[offset:offset+32],times,sun,earth))
+            metrics_rows = evaluate_many(arrays, indices, times, sun, earth)
         else:
             metrics_rows = selected_metrics(settings.data_root, metadata, arrays, indices, settings.kernel_root, start, end, columnar=True) if is_tiled(settings.data_root) else cached_metrics(
                 settings.data_root,

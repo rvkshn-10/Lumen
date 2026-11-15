@@ -7,14 +7,14 @@
 .power-use figure { margin: 0; }
 .power-use figcaption { color: var(--text-secondary); font-size: .88rem; margin-block-end: .4rem; }
 .power-use-plot { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .6rem; }
-.power-use-y { display: flex; flex-direction: column; justify-content: space-between; text-align: right; color: var(--text-secondary); font-size: .78rem; font-variant-numeric: tabular-nums; margin-block: -.5em; }
+.power-use-y { min-width: 3.4rem; display: flex; flex-direction: column; justify-content: space-between; text-align: right; color: var(--text-secondary); font-size: .78rem; font-variant-numeric: tabular-nums; margin-block: -.5em; }
 .power-use svg { display: block; width: 100%; height: clamp(8rem, 18vw, 11rem); overflow: visible; }
 .power-use polyline { fill: none; stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.power-use-zero, .power-use-grid { stroke: var(--line); vector-effect: non-scaling-stroke; }
-.power-use-zero { stroke: var(--line-strong); stroke-dasharray: 4 3; }
-.power-use-deficit { fill: color-mix(in srgb, #d4644b 7%, transparent); }
+.power-use-grid { stroke: var(--line); vector-effect: non-scaling-stroke; }
+
+
 .power-use-out { stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-.power-use-axis { display: grid; grid-template-columns: repeat(3, 1fr); margin: .4rem 0 1rem; padding-inline-start: 2.6rem; color: var(--text-secondary); font-size: .8rem; text-align: center; }
+.power-use-axis { display: grid; grid-template-columns: repeat(3, 1fr); margin: .4rem 0 1rem; padding-inline-start: 4rem; color: var(--text-secondary); font-size: .8rem; text-align: center; }
 .power-use-axis > :first-child { text-align: left; } .power-use-axis > :last-child { text-align: right; }
 .power-use-axis small { display: block; }
 .power-use-table td, .power-use-table th { font-variant-numeric: tabular-nums; }

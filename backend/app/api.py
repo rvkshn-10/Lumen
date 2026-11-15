@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from time import perf_counter
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -16,6 +17,7 @@ from app.services.profiling import phase
 from app.services.repository import is_tiled, read_asset, release_metadata
 from app.services.search import search
 from app.services.sites import SiteNotFound, scenario_analysis, site_analysis
+from app.services.solar_overlay import overlay as solar_overlay
 from app.services.terrain_store import UnknownSite
 from app.services.validation import SearchValidationError, validate_search
 from app.settings import settings
@@ -123,6 +125,24 @@ def terrain_local(x_m: float, y_m: float, half_km: float = 6) -> dict:
     except (DataUnavailable, OSError, ValueError) as exc:
         raise HTTPException(
             status_code=503, detail={"code": "local_terrain_unavailable", "message": str(exc)}
+        ) from exc
+
+
+@router.get("/solar/overlay")
+def solar_generation_overlay(time_utc: datetime, area_m2: float = 1, efficiency: float = 0.30,
+                             probe_site_id: str | None = None) -> JSONResponse:
+    """Estimated solar generation (W) across the Moon at one scene time."""
+    from app.models import PowerSettings
+
+    try:
+        power = PowerSettings(area_m2=area_m2, efficiency=efficiency)
+        moment = time_utc if time_utc.tzinfo else time_utc.replace(tzinfo=UTC)
+        return JSONResponse(solar_overlay(moment.astimezone(UTC), power, probe_site_id))
+    except (SiteNotFound, UnknownSite) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (DataUnavailable, OSError, ValueError, SpiceyError) as exc:
+        raise HTTPException(
+            status_code=503, detail={"code": "solar_overlay_unavailable", "message": str(exc)}
         ) from exc
 
 

@@ -12,7 +12,6 @@ import { MissionWindowCheck } from "./MissionWindowCheck";
 import { sampleIndexAt } from "../lib/mission-window";
 import { HorizonReview } from "./HorizonReview";
 import { CopilotExplanation } from "./CopilotExplanation";
-import { SolarGeneration } from "./SolarGeneration";
 import { PowerUse } from "./PowerUse";
 import { siteFrame, useLocalTerrain } from "../lib/local-terrain";
 import { CandidateResults } from "./CandidateResults";
@@ -28,6 +27,22 @@ const metrics = [
   { key: "energy_wh", label: "Energy estimate", format: (n: number) => `${(n / 1000).toFixed(2)} kWh`, higher: true, meaning: "Energy generated across the window under the stated panel assumptions." },
 ] as const;
 type Key = typeof metrics[number]["key"];
+type Detail = "plain" | "engineer";
+const exactFormat: Record<Key, (n: number) => string> = {
+  illumination_fraction: n => `${(n * 100).toFixed(4)}%`,
+  earth_visibility_fraction: n => `${(n * 100).toFixed(4)}%`,
+  longest_darkness_hours: n => `${n.toFixed(3)} h`,
+  energy_wh: n => `${(n / 1000).toFixed(4)} kWh`,
+};
+const plainMeaning: Record<Key, { more: string; less: string }> = {
+  illumination_fraction: { more: "more time in sunlight, so more solar power", less: "less time in sunlight" },
+  earth_visibility_fraction: { more: "Earth in view for longer, so more time to talk to mission control", less: "less time with Earth in view" },
+  longest_darkness_hours: { more: "a longer night the batteries must cover", less: "a shorter worst-case night, so less battery is needed" },
+  energy_wh: { more: "more energy from the same panel", less: "less energy from the same panel" },
+};
+function readDetail(): Detail {
+  try { return localStorage.getItem("lumen-compare-detail") === "engineer" ? "engineer" : "plain"; } catch { return "plain"; }
+}
 const metricAttributes = (id: string, key: string, raw: number | string) => ({ "data-metric": `${id}:${key}`, "data-raw": raw });
 const value = (row: Scenario, key: Key) => key === "energy_wh" ? row.site.power?.energy_wh : row.site.metrics[key];
 const siteCoordinates = (row: Scenario) => coordinate(row.site.latitude_deg, row.site.longitude_deg_east);
@@ -35,9 +50,32 @@ const label = (row: Scenario) => row.label && !/^Site [A-D]$/.test(row.label)
   ? row.label : row.site.rank ? `Candidate ${row.site.rank}` : siteCoordinates(row);
 const comparisonLabel = (row: Scenario, index: number) => `${compareSiteLabel(index)} · ${label(row)}`;
 
-function Metric({ row, metric }: { row: Scenario; metric: typeof metrics[number] }) {
+function Metric({ row, metric, exact = false }: { row: Scenario; metric: typeof metrics[number]; exact?: boolean }) {
   const number = value(row, metric.key);
-  return number == null ? <span>Unavailable</span> : <span {...metricAttributes(row.site.id, metric.key, number)}>{metric.format(number)}</span>;
+  return number == null ? <span>Unavailable</span> : <span {...metricAttributes(row.site.id, metric.key, number)}>{(exact ? exactFormat[metric.key] : metric.format)(number)}</span>;
+}
+
+/** Plain-language summary of where the selected scenarios differ most. */
+function KeyDifferences({ rows }: { rows: Scenario[] }) {
+  const lines = metrics.flatMap(metric => {
+    const entries = rows.flatMap((row, index) => {
+      const number = value(row, metric.key);
+      return number == null ? [] : [{ index, number }];
+    });
+    if (entries.length < 2) return [];
+    const sorted = [...entries].sort((a, b) => metric.higher ? b.number - a.number : a.number - b.number);
+    const best = sorted[0], worst = sorted.at(-1)!;
+    if (metric.format(best.number) === metric.format(worst.number)) return [];
+    const leader = compareSiteLabel(best.index), trailer = compareSiteLabel(worst.index);
+    const meaning = metric.higher ? plainMeaning[metric.key].more : plainMeaning[metric.key].less;
+    return [<li key={metric.key}><strong>{metric.label}:</strong> {leader} is ahead ({metric.format(best.number)} vs {metric.format(worst.number)} at {trailer}) — {meaning}.</li>];
+  });
+  return <section className="compare-reading" aria-label="How to read this comparison">
+    <h3>How to read this</h3>
+    <p>Each column is one scenario: a site and its mission dates. The highlighted value in each row is the best one. Rows that look the same are effectively tied.</p>
+    {lines.length ? <ul>{lines}</ul> : <p>The selected scenarios give the same results on these measures. Try other sites or dates to see a difference.</p>}
+    <p className="field-hint">Switch to Engineer view for exact values, units and model assumptions.</p>
+  </section>;
 }
 
 type Cutoff = LunarEvent & { type: "sunset" | "earthset"; refined: boolean };
@@ -169,7 +207,7 @@ const boardViews = ["Overview", "Timeline", "Analysis"] as const;
 type BoardView = typeof boardViews[number];
 const overviewMetrics = [metrics[1], metrics[0], metrics[2], metrics[3]];
 
-function ComparisonValues({ rows, onDetails, onChoose }: { rows: Scenario[]; onDetails?: (row: Scenario, index: number) => void; onChoose?: (row: Scenario, index: number) => void }) {
+function ComparisonValues({ rows, onDetails, onChoose, detail = "plain" }: { rows: Scenario[]; onDetails?: (row: Scenario, index: number) => void; onChoose?: (row: Scenario, index: number) => void; detail?: Detail }) {
   const timeRange = rows[0].request.time_range;
   const commonWindow = rows.every(({ request }) =>
     request.time_range.start_utc === timeRange.start_utc && request.time_range.end_utc === timeRange.end_utc);
@@ -184,8 +222,8 @@ function ComparisonValues({ rows, onDetails, onChoose }: { rows: Scenario[]; onD
         <thead><tr>
           <th scope="col"><span className="sr-only">Metric</span></th>
           {rows.map((row, index) => <th scope="col" key={row.key}>
-            {compareSiteLabel(index)}<small>{label(row)}</small>
-            {!commonWindow && <small>{utcRange(row.request.time_range)}</small>}
+            {compareSiteLabel(index)}
+            <span className="compare-scenario-name"><strong>{label(row)}</strong><small>{utcRange(row.request.time_range)}</small></span>
             {(onDetails || onChoose) && <span className="compare-column-actions">
               {onDetails && <button type="button" className="text-button" onClick={() => onDetails(row, index)}>More details</button>}
               {onChoose && <button type="button" className="secondary-button" onClick={() => onChoose(row, index)}>Choose this site</button>}
@@ -197,11 +235,11 @@ function ComparisonValues({ rows, onDetails, onChoose }: { rows: Scenario[]; onD
           const best = (metric.higher ? Math.max : Math.min)(...numbers);
           const differs = new Set(numbers.map(metric.format)).size > 1;
           return <tr key={metric.key}>
-            <th scope="row">{metric.label}</th>
+            <th scope="row">{metric.label}{detail === "engineer" && <small className="compare-metric-key">{metric.key}</small>}</th>
             {rows.map(row => {
               const number = value(row, metric.key);
               const leads = number != null && differs && metric.format(number) === metric.format(best);
-              return <td key={row.key} className={leads ? "compare-leading" : undefined}><Metric row={row} metric={metric} /></td>;
+              return <td key={row.key} className={leads ? "compare-leading" : undefined}><Metric row={row} metric={metric} exact={detail === "engineer"} /></td>;
             })}
           </tr>;
         })}</tbody>
@@ -226,6 +264,11 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     ? initialSelectedIds.flatMap(id => rows.find(row => row.site.id === id)?.key ?? []).slice(0, COMPARE_LIMIT)
     : rows.slice(0, selectInitialRows ? COMPARE_LIMIT : 2).map(row => row.key));
   const [view, setView] = useState<BoardView>("Overview");
+  const [detail, setDetailState] = useState<Detail>(readDetail);
+  function setDetail(next: Detail) {
+    setDetailState(next);
+    try { localStorage.setItem("lumen-compare-detail", next); } catch { /* storage is optional */ }
+  }
   const [analysisVisited, setAnalysisVisited] = useState(false);
   const boardId = useId();
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -280,7 +323,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     const name = label(row);
     const position = siteCoordinates(row);
     const sameName = rows.some(other => other !== row && label(other) === name);
-    return { key: row.key, name: [name, name !== position && position, sameName && utcRange(row.request.time_range)].filter(Boolean).join(" · ") };
+    return { key: row.key, name: [name, utcRange(row.request.time_range), name !== position && position].filter(Boolean).join(" · ") };
   }), [rows]);
   useEffect(() => { if (showExtraPicker) extraSitePicker.current?.focus(); }, [showExtraPicker]);
   const compared = new Map(picked.flatMap((row, index) => result && row.key === scenarioKey(row.site.id, result.request)
@@ -412,6 +455,11 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     menu.querySelector("summary")?.focus();
   }}>
     <h2 id="scenario-board-title" className="sr-only">Scenario board</h2>
+    {rows.length > 0 && <ol className="compare-steps" aria-label="How to compare">
+      <li className={picked.length >= 2 ? "done" : "current"}><strong>Choose 2–4 scenarios</strong><span>Pick a site in each slot below, or tick scenarios under “Edit scenarios”. A scenario is one site with one set of mission dates.</span></li>
+      <li className={picked.length >= 2 ? "current" : ""}><strong>Read the comparison</strong><span>The table and charts under Overview update as you choose. Timeline lines the scenarios up on a shared clock; Analysis has mission checks.</span></li>
+      <li aria-live="polite" className="compare-count"><strong>{picked.length} of {COMPARE_LIMIT} selected</strong><span>{picked.length < 2 ? `Add ${2 - picked.length} more to compare.` : picked.length < COMPARE_LIMIT ? `You can add ${COMPARE_LIMIT - picked.length} more.` : "Remove one to add another."}</span></li>
+    </ol>}
     {rows.length > 0 && <div className="compare-site-controls glass-surface" id="comparison-sites" role="group" aria-label="Sites to compare">
       <div className="compare-site-slots">
         {slots.map((row, index) => <div className="compare-site-slot" key={index}>
@@ -424,6 +472,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
               {optionNames.filter(option => row || !selected.includes(option.key))
                 .map(option => <option key={option.key} value={option.key}>{option.name}</option>)}
             </select>
+            {row && <small className="compare-slot-dates">{label(row)} · {utcRange(row.request.time_range)}</small>}
           </label>
           <button type="button" className="compare-remove-site"
             aria-label={`${row ? "Remove" : "Cancel adding"} ${compareSiteLabel(index)}`}
@@ -464,6 +513,10 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
           }}
           onClick={() => show(name)}>{name}</button>)}
       </div>
+      {rows.length > 0 && <div className="compare-detail-toggle" role="group" aria-label="Level of detail">
+        <button type="button" aria-pressed={detail === "plain"} onClick={() => setDetail("plain")}>Plain view</button>
+        <button type="button" aria-pressed={detail === "engineer"} onClick={() => setDetail("engineer")}>Engineer view</button>
+      </div>}
       {rows.length > 0 && <details ref={shareMenu} className="compare-actions">
         <summary aria-label="Share and export"><Icon name="download" size={16} /><span className="compare-action-label">Share</span></summary>
         <div className="compare-menu">
@@ -480,11 +533,20 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     </div>}
 
     <div className="scenario-overview" role="tabpanel" id={ids("Overview").panel} aria-labelledby={ids("Overview").tab} hidden={view !== "Overview"}>
-      {picked.length > 0 && <ComparisonValues rows={picked}
+      {picked.length > 1 && detail === "plain" && <KeyDifferences rows={picked} />}
+      {picked.length > 0 && <ComparisonValues rows={picked} detail={detail}
         onDetails={onDetails ? (row, index) => onDetails(row, comparisonLabel(row, index)) : undefined}
         onChoose={onChoose ? (row, index) => onChoose(row, comparisonLabel(row, index)) : undefined} />}
       {picked.length > 0 && <PowerUse rows={picked} name={comparisonLabel} start={start} end={end} />}
-      {picked.length > 0 && <SolarGeneration rows={picked} name={comparisonLabel} start={start} end={end} />}
+      {picked.length > 0 && detail === "engineer" && <section className="compare-assumptions" aria-label="Exact values and assumptions">
+        <h3>Assumptions behind these values</h3>
+        <dl>
+          {metrics.map(metric => <div key={metric.key}><dt>{metric.label} <code>{metric.key}</code></dt><dd>{metric.meaning}</dd></div>)}
+          <div><dt>Time sampling</dt><dd>Sun and Earth positions every 5 minutes from NASA/NAIF SPICE (DE440, MOON_ME frame); fractions integrate left samples over the mission window. Transitions are uncertain by up to one sample.</dd></div>
+          <div><dt>Terrain horizon</dt><dd>NASA LOLA horizon profiles at 5° bearings per site; the larger of two adjacent bins is used. Observer 2 m above the surface.</dd></div>
+          <div><dt>Mission windows</dt><dd>{picked.map((row, index) => `${compareSiteLabel(index)}: ${row.request.time_range.start_utc} → ${row.request.time_range.end_utc}`).join(" · ")}</dd></div>
+        </dl>
+      </section>}
       {picked.length < 2 && canPickMore && <p className="compare-selection-hint">Add {picked.length ? "another site" : "a site"} to start comparing.</p>}
       {rows.length > 0 && <details className="compare-management">
         <summary>Edit scenarios</summary>
@@ -554,6 +616,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
         <label className="field scenario-clock glass-surface">Compare time <time dateTime={new Date(clock).toISOString()}>{utcTime(new Date(clock).toISOString())}</time>
           <input type="range" aria-label="Compare time" min={0} max={maxOffset} value={Math.min(offset, maxOffset)} aria-valuetext={utcTime(new Date(clock).toISOString())} onChange={event => setOffset(Number(event.target.value))} />
         </label>
+        <p className="compare-clock-help">The shared clock is one moment in time, applied to every selected scenario at once. Drag it to see which sites have the Sun and Earth in view at that instant: filled bars mean visible, gaps mean hidden behind terrain or below the horizon. Scenarios with different dates sit side by side on the same calendar, so a scenario shows nothing while the clock is outside its dates. It does not change any results.</p>
         <Timeline rows={picked} start={start} end={end} clock={clock} onInspect={inspectCutoff} />
         <details className="compare-disclosure">
           <summary>Upcoming cutoffs</summary>

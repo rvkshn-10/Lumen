@@ -34,7 +34,7 @@ def cached_result(operation: str, request: str, sources: str, calculate, *, root
     result = calculate()
     serialized = json.dumps(result, separators=(",", ":"), allow_nan=False)
     packed = gzip.compress(json.dumps({"key": key, "sha256": hashlib.sha256(serialized.encode()).hexdigest(),
-                                       "result": serialized}).encode(), mtime=0)
+                                       "result": serialized}).encode(), compresslevel=1, mtime=0)
     if len(packed) <= MAX_BYTES:
         try:
             root.mkdir(parents=True, exist_ok=True)

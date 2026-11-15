@@ -110,7 +110,7 @@ def selected_metrics(
     # Import lazily: the scientific engine also consumes this repository.
     from app.services.ephemeris import body_positions
     from app.services.metric_columns import MetricRows
-    from app.services.search import METRIC_KEYS, evaluate_metrics
+    from app.services.search import METRIC_KEYS, evaluate_many
     from app.services.tile_metrics import cache_identity, load_tile_metrics, window_directory
 
     terrain = store(root)
@@ -149,10 +149,8 @@ def selected_metrics(
         raise DataUnavailable("Exact demo cache did not account for every selected site")
     if len(missing):
         times, sun, earth = body_positions(kernel_root, start, end, 5)
-        for offset in range(0, len(missing), 32):
-            positions = missing[offset : offset + 32]
-            computed = evaluate_metrics(arrays, np.asarray(indices)[positions], times, sun, earth)
-            for key in METRIC_KEYS:
-                output[key][positions] = [row[key] for row in computed]
+        computed = evaluate_many(arrays, np.asarray(indices)[missing], times, sun, earth)
+        for key in METRIC_KEYS:
+            output[key][missing] = [row[key] for row in computed]
     rows = MetricRows(output)
     return rows if columnar else tuple(rows)

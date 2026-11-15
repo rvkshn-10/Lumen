@@ -302,3 +302,12 @@
 }
 
 .preparation-state { margin: .5rem auto; max-width: 72rem; color: var(--text-secondary); font-size: .78rem; text-align: center; min-height: 1.4em; }
+
+/* Five planning stages fit narrow phones without wrapping a label. */
+.guide-steps button { white-space: nowrap; }
+@media (max-width: 560px) {
+  .guide-steps { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .guide-steps::-webkit-scrollbar { display: none; }
+  .guide-steps button { font-size: .8rem; padding-inline: 5px; }
+  .planner-masthead .brand span { display: none; }
+}

@@ -8,8 +8,13 @@ import type { SceneSite } from "../lib/scene-geometry";
 import { terrainRadius } from "../lib/scene-geometry";
 import type { LunarCoordinate } from "../lib/hemisphere";
 import type { LunarFeature } from "../lib/types";
+import type { SolarOverlay } from "../lib/solar-overlay";
+import { overlayValue } from "../lib/solar-overlay";
+import { solarColor } from "../lib/solar-model";
 
-export const TopographicMoon = memo(function TopographicMoon({ exaggeration, features, labels, selectedCenter, radiusKm, onPick, onLandmark, drawMode = false, maximumRadiusKm = 5, onArea, onDrawFeedback, onDrawEnd, sites = [], selectedSite, onSiteSelect, onSiteBounds }: {
+export const TopographicMoon = memo(function TopographicMoon({ exaggeration, features, labels, selectedCenter, radiusKm, onPick, onLandmark, drawMode = false, maximumRadiusKm = 5, onArea, onDrawFeedback, onDrawEnd, sites = [], selectedSite, onSiteSelect, onSiteBounds, solar = null }: {
+  /** Estimated solar generation at the scene time; colors the surface when present. */
+  solar?: SolarOverlay | null;
   exaggeration: number; features: LunarFeature[]; labels: boolean; selectedCenter?: LunarCoordinate; radiusKm?: number;
   onPick?: (point: LunarCoordinate) => void; onLandmark?: (feature: LunarFeature) => void;
   sites?: SceneSite[]; selectedSite?: string | null; onSiteSelect?: (id: string) => void; onSiteBounds?: (bounds: THREE.Sphere) => void;
@@ -93,6 +98,31 @@ export const TopographicMoon = memo(function TopographicMoon({ exaggeration, fea
     shape.computeVertexNormals(); shape.computeBoundingSphere();
     return shape;
   }, [grid, exaggeration, baseGeometry, sites]);
+  // Latitude/longitude of every vertex, for sampling the solar-generation overlay.
+  const vertexCoordinates = useMemo(() => {
+    const positions = geometry.getAttribute("position");
+    const latitude = new Float32Array(positions.count), longitude = new Float32Array(positions.count);
+    for (let i = 0; i < positions.count; i++) {
+      const coordinate = lunarCoordinate(positions.getX(i), positions.getY(i), positions.getZ(i))!;
+      latitude[i] = coordinate.latitude_deg; longitude[i] = coordinate.longitude_deg_east;
+    }
+    return { latitude, longitude };
+  }, [geometry]);
+  useEffect(() => {
+    if (!solar) return;
+    const { latitude, longitude } = vertexCoordinates;
+    const colors = new Float32Array(latitude.length * 3);
+    // Legend colors are sRGB; vertex colors are linear, so convert to match the legend on screen.
+    const linear = (value: number) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    for (let i = 0; i < latitude.length; i++) {
+      const [r, g, b] = solarColor(overlayValue(solar, latitude[i], longitude[i]).watts, solar.maximum_w);
+      colors[i * 3] = linear(r); colors[i * 3 + 1] = linear(g); colors[i * 3 + 2] = linear(b);
+    }
+    const attribute = geometry.getAttribute("color") as THREE.BufferAttribute | undefined;
+    if (attribute && attribute.count === latitude.length) { (attribute.array as Float32Array).set(colors); attribute.needsUpdate = true; }
+    else geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    invalidate();
+  }, [solar, geometry, vertexCoordinates, invalidate]);
   useEffect(() => () => baseGeometry.dispose(), [baseGeometry]);
   useEffect(() => () => geometry.dispose(), [geometry]);
   useEffect(() => { texture.colorSpace = THREE.SRGBColorSpace; texture.wrapS = THREE.RepeatWrapping; texture.anisotropy = 4; texture.needsUpdate = true; }, [texture]);
@@ -182,8 +212,9 @@ export const TopographicMoon = memo(function TopographicMoon({ exaggeration, fea
   const graticule = useMemo(() => {
     const point = (lat: number, lon: number) => lunarPoint(lat, lon, terrainRadius(grid, { latitude_deg: lat, longitude_deg_east: lon }, exaggeration) + .009);
     return [
-      ...[-60, -30, 0, 30, 60].map(lat => ({ key: `lat-${lat}`, equator: lat === 0, points: Array.from({ length: 361 }, (_, i) => point(lat, i - 180)) })),
-      ...Array.from({ length: 12 }, (_, index) => ({ key: `lon-${index}`, equator: false, points: Array.from({ length: 181 }, (_, i) => point(i - 90, index * 30 - 180)) })),
+      // The equator is intentionally not drawn: it read as a feature of the Moon.
+      ...[-60, -30, 30, 60].map(lat => ({ key: `lat-${lat}`, points: Array.from({ length: 361 }, (_, i) => point(lat, i - 180)) })),
+      ...Array.from({ length: 12 }, (_, index) => ({ key: `lon-${index}`, points: Array.from({ length: 181 }, (_, i) => point(i - 90, index * 30 - 180)) })),
     ];
   }, [grid, exaggeration]);
   const marker = !sites.length && selectedCenter ? lunarPoint(selectedCenter.latitude_deg, selectedCenter.longitude_deg_east, terrainRadius(grid, selectedCenter, exaggeration) + .025) : undefined;
@@ -198,7 +229,6 @@ export const TopographicMoon = memo(function TopographicMoon({ exaggeration, fea
     return entries;
   }, [features, grid, exaggeration, selectedCenter?.latitude_deg, selectedCenter?.longitude_deg_east]);
   const gridLabels = useMemo(() => [
-    ...[0, 90, 180, -90].map(lon => ({ id: `equator-${lon}`, name: "Equator · 0°", point: new THREE.Vector3(...lunarPoint(0, lon, terrainRadius(grid, { latitude_deg: 0, longitude_deg_east: lon }, exaggeration) + .025)) })),
     ...[-60, -30, 30, 60].map(lat => ({ id: `parallel-${lat}`, name: `${Math.abs(lat)}°${lat < 0 ? "S" : "N"}`, point: new THREE.Vector3(...lunarPoint(lat, 0, terrainRadius(grid, { latitude_deg: lat, longitude_deg_east: 0 }, exaggeration) + .025)) })),
   ], [grid, exaggeration]);
   useFrame(({ camera, size }) => {
@@ -225,7 +255,7 @@ export const TopographicMoon = memo(function TopographicMoon({ exaggeration, fea
       const local = event.object.worldToLocal(event.point.clone());
       const coordinate = lunarCoordinate(local.x, local.y, local.z);
       if (coordinate) onPick(coordinate);
-    }}><meshStandardMaterial map={texture} roughness={1} metalness={0} onBeforeCompile={shader => {
+    }}>{solar ? <meshBasicMaterial key="solar" vertexColors toneMapped={false} /> : <meshStandardMaterial key="photo" map={texture} roughness={1} metalness={0} onBeforeCompile={shader => {
       shader.fragmentShader = shader.fragmentShader.replace("#include <map_fragment>", `#include <map_fragment>
         float poleDistance = min(vMapUv.y, 1.0 - vMapUv.y);
         if (poleDistance < 0.0014) {
@@ -236,10 +266,10 @@ export const TopographicMoon = memo(function TopographicMoon({ exaggeration, fea
           diffuseColor.rgb = mix(polarColor, diffuseColor.rgb, smoothstep(0.0, 0.0014, poleDistance));
         }
       `);
-    }} /></mesh></Bvh>
+    }} />}</mesh></Bvh>
     {sites.length > 0 && <instancedMesh key={sites.length} ref={siteCloud} args={[undefined, undefined, sites.length]} onClick={event => { event.stopPropagation(); if (event.delta < 5 && event.instanceId !== undefined) onSiteSelect?.(sites[event.instanceId].id); }}><sphereGeometry args={[1, 10, 8]} /><meshBasicMaterial /></instancedMesh>}
     {sites.filter(site => site.rank && site.rank <= 10).map(site => { const i = sites.indexOf(site); return <Html key={site.id} position={sitePositions[i]} center style={{ pointerEvents: "none" }} zIndexRange={[42, 0]}><button ref={element => registerLabel(`candidate-${site.id}`, element)} className="candidate-site-label" aria-label={`Select mapped candidate ${site.rank}`} aria-pressed={site.id === selectedSite} onClick={() => onSiteSelect?.(site.id)}>{site.rank}</button></Html>; })}
-    {graticule.map(line => <Line key={line.key} points={line.points} color={line.equator ? "#efc97c" : "#a8c5c3"} opacity={line.equator ? .9 : .25} transparent lineWidth={line.equator ? 2 : .7} raycast={() => {}} />)}
+    {graticule.map(line => <Line key={line.key} points={line.points} color="#a8c5c3" opacity={.25} transparent lineWidth={.7} raycast={() => {}} />)}
     <Line points={Array.from({ length: 129 }, (_, index) => {
       const longitude = index / 128 * 360 - 180;
       return lunarPoint(-87, longitude, terrainRadius(grid, { latitude_deg: -87, longitude_deg_east: longitude }, exaggeration) + .012);
