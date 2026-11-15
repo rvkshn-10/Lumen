@@ -61,3 +61,26 @@ def test_digest_invalidates_when_write_timestamp_is_preserved(tmp_path):
     path.write_bytes(b"modified")
     os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
     assert digest(path) != first
+
+
+def test_small_artifact_stamp_uses_content_when_metadata_clock_collides(tmp_path, monkeypatch):
+    import os
+
+    from app.services import terrain_store
+    path = tmp_path / "terrain.img"
+    path.write_bytes(b"original")
+    stat = path.stat()
+    # Simulate coarse filesystem change-time metadata, independently of the OS clock.
+    if os.name == "nt":
+        library, info_type = terrain_store._windows_file_api()
+        original = library.GetFileInformationByHandleEx
+        def fixed_change(handle, kind, pointer, size):
+            import ctypes
+            result = original(handle, kind, pointer, size)
+            ctypes.cast(pointer, ctypes.POINTER(info_type)).contents.changed = 123
+            return result
+        monkeypatch.setattr(library, "GetFileInformationByHandleEx", fixed_change)
+    first = terrain_store.digest(path)
+    path.write_bytes(b"modified")
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    assert terrain_store.digest(path) != first

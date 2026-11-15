@@ -67,7 +67,10 @@ def artifact_stamp(path):
             changed = info.changed
         finally:
             library.CloseHandle(handle)
-    return stat.st_size, stat.st_mtime_ns, changed, stat.st_ino
+    # Small rewrites can share one coarse Windows clock tick even with ChangeTime.
+    # Fingerprint their bytes directly; large immutable DEMs retain chunked verification.
+    content = hashlib.sha256(path.read_bytes()).hexdigest() if stat.st_size <= 1024 * 1024 else None
+    return stat.st_size, stat.st_mtime_ns, changed, stat.st_ino, content
 
 
 def digest(path: Path) -> str:

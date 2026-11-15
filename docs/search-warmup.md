@@ -67,6 +67,7 @@ The epoch tracks terrain/catalog/feature metadata, source artifacts, survey and
 global horizon artifacts, pinned kernels, all backend code, kernel mode and radius
 configuration. Small JSON manifests are also content-hashed. Windows NT ChangeTime
 and file identity detect artifact changes even when LastWriteTime is preserved.
+Small artifacts are content-fingerprinted to cover coarse timestamp collisions.
 Large terrain checksums are retained only for the exact verified file identity.
 
 Request-start/end checks and the supervisor invalidate workers after source or
