@@ -348,10 +348,9 @@
 }
 .compare-analysis-panel .copilot-explanation {
   border: 0;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
-  margin: 0;
-  padding: .75rem 0;
+  border-radius: 22px;
+  margin: .75rem 0;
+  padding: .35rem 1rem;
 }
 .compare-analysis-panel :is(.scenario-chart-section, .compare-launch-section) {
   margin-bottom: .85rem;
@@ -458,7 +457,7 @@
 .scenario-terrain { margin: 20px 0; }
 .scenario-terrain .compare-terrain-view { width: min(100%, 13rem); margin-bottom: .8rem; }
 .scenario-terrain > p { margin: 10px 0; color: var(--text-secondary); }
-.scenario-terrain .terrain-3d-frame { height: 420px; border-radius: 12px; overflow: hidden; }
+.scenario-terrain .terrain-3d-frame { height: 420px; border-radius: 20px; overflow: hidden; }
 @media (max-width: 650px) { .scenario-terrain .terrain-3d-frame { height: 300px; } }
 @media print { .scenario-terrain { display: none; } }
 

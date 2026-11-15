@@ -1,5 +1,6 @@
 """Verify local coarse ranking and actual search-result locations on the 3D Moon."""
 
+import argparse
 import json
 from pathlib import Path
 from time import perf_counter
@@ -8,12 +9,16 @@ from playwright.sync_api import expect, sync_playwright
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--url", default="http://127.0.0.1:8000")
+    parser.add_argument("--channel")
+    args = parser.parse_args()
     output = Path("data/cache/local-ranking-qa")
     output.mkdir(parents=True, exist_ok=True)
     errors, timings, checks, console_errors = [], [], [], []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
-            headless=True, args=["--enable-unsafe-swiftshader"]
+            channel=args.channel, headless=True, args=["--enable-unsafe-swiftshader"]
         )
         for width in (1440, 390):
             page = browser.new_page(
@@ -29,14 +34,31 @@ def main():
                     else None
                 ),
             )
-            page.goto("http://127.0.0.1:8000", wait_until="networkidle")
-            if not page.locator("details.area-editor").evaluate("el => el.open"):
-                page.locator("details.area-editor > summary").click()
+            page.goto(args.url, wait_until="networkidle")
+            if not page.locator("details.area-inputs").evaluate("el => el.open"):
+                page.locator("details.area-inputs > summary").click()
+            expect(
+                page.get_by_role("button", name="Continue to mission", exact=True)
+            ).to_be_enabled()
+            page.screenshot(
+                path=str(output / f"detailed-selection-{width}.png"), full_page=True
+            )
             page.get_by_role("button", name="Find a place", exact=True).click()
             page.get_by_label("Find an approved landmark", exact=True).fill("Tycho")
             page.locator(".landmark-matches button").first.click()
             page.get_by_label("Detailed search radius (km)", exact=False).fill("5")
             expect(page.locator(".coarse-area-preview")).to_be_visible()
+            page.get_by_role(
+                "button", name="Set up regional preview", exact=True
+            ).click()
+            expect(page.locator(".local-area-workspace")).to_be_focused()
+            expect(
+                page.get_by_role("button", name="Continue to mission", exact=True)
+            ).to_have_count(0)
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            page.screenshot(
+                path=str(output / f"preview-setup-{width}.png"), full_page=True
+            )
             started = perf_counter()
             with page.expect_response(
                 lambda response: (
@@ -92,13 +114,21 @@ def main():
             page.get_by_label("Coarse ranking priority", exact=True).select_option("0")
             expect(page.locator(".coarse-area-ranking .changed-notice")).to_be_visible()
             page.get_by_role(
-                "button", name="Use a supported south-pole area", exact=True
+                "button", name="Try a detailed south-pole search", exact=True
             ).click()
             page.get_by_label("Detailed search radius (km)", exact=False).fill("3")
             expect(
                 page.get_by_role("button", name="Continue to mission", exact=True)
             ).to_be_enabled()
             page.get_by_role("button", name="Continue to mission", exact=True).click()
+            expect(page.locator("#mission-duration")).to_have_text(
+                "Mission duration: 7 days."
+            )
+            mission_end = page.get_by_label("Mission end (UTC, exclusive)", exact=True)
+            applied_end = mission_end.input_value()
+            mission_end.fill("2028-10-09T00:00")
+            expect(page.locator("#mission-duration")).to_contain_text("7 days or less")
+            mission_end.fill(applied_end)
             page.get_by_role("button", name="Review mission", exact=True).click()
             with page.expect_response(
                 lambda response: (

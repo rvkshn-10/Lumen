@@ -26,6 +26,7 @@ def check(page, url: str) -> list[dict]:
     result = response.json()
     board = page.get_by_role("region", name="Scenario board")
     expect(board).to_be_visible()
+    board.get_by_role("button", name="Engineer view", exact=True).click()
     sites = {site["id"]: site for site in result["candidates"]}
     assert len(sites) >= 2, "The demo window needs two eligible locations"
 

@@ -63,6 +63,8 @@ export function refineSurveyRequest(request: SearchRequest, site: Pick<Candidate
 export function publicLimitErrors(request: SearchRequest, catalog: CoverageCatalog) {
   const start = Date.parse(request.time_range.start_utc), end = Date.parse(request.time_range.end_utc);
   if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return ["Choose an end date later than the start date."];
+  const margin = request.dte_margin_deg ?? 2;
+  if (!Number.isFinite(margin) || margin < 0 || margin > 90) return ["Earth clearance must be between 0° and 90°."];
   const limits = catalog.public_limits;
   if (request.region.selector_type === "full_supported_region") {
     return start === Date.parse(limits.full_region_start_utc) && end === Date.parse(limits.full_region_end_utc) ? [] :

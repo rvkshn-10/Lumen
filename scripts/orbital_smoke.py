@@ -28,8 +28,8 @@ def main():
         )
 
     def open_editor(page):
-        if not page.locator("details.area-editor").evaluate("element => element.open"):
-            page.locator(".area-editor > summary").click()
+        if not page.locator("details.area-inputs").evaluate("element => element.open"):
+            page.locator(".area-inputs > summary").click()
 
     try:
         with sync_playwright() as playwright:
@@ -179,7 +179,7 @@ def main():
                     }
                 )
                 page.get_by_role(
-                    "button", name="Use a supported south-pole area", exact=True
+                    "button", name="Try a detailed south-pole search", exact=True
                 ).click()
                 expect(
                     page.get_by_role("button", name="Continue to mission", exact=True)

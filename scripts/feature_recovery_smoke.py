@@ -52,11 +52,12 @@ def main():
             page.get_by_role("button", name="Earth orbit", exact=True).click()
             expect(page.locator(".body-label.earth")).to_be_visible()
             expect(page.locator(".body-label.sun")).to_be_visible()
+            page.locator(".context-sky-tool > summary").click()
             page.get_by_role("button", name="View from site", exact=True).click()
             expect(page.locator(".site-sky-context")).to_be_visible()
             expect(page.locator(".site-horizon-overview")).to_be_visible()
             page.get_by_role("button", name="Moon surface", exact=True).click()
-            editor = page.locator("details.area-editor")
+            editor = page.locator("details.area-inputs")
             if not editor.evaluate("el => el.open"):
                 editor.locator("summary").first.click()
             page.get_by_role("button", name="Find a place", exact=True).click()

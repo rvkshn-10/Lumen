@@ -38,3 +38,32 @@
   color: var(--surface);
 }
 .clps-replay-values small { display: block; margin-top: 4px; font-size: 0.85rem; }
+
+/* 3D landing view */
+.landing-scene.terrain-3d-frame { position: relative; height: clamp(300px, 46vh, 460px); margin: 14px 0; background: #03050a; }
+.landing-scene > div:first-child { position: absolute !important; inset: 0; }
+.landing-scene-loading { margin: 0; padding: 2rem 1rem; text-align: center; color: #b5b5b5; }
+.landing-scene-caption {
+  position: absolute; left: 12px; bottom: 10px; z-index: 5; margin: 0;
+  padding: 4px 10px; border-radius: 999px; font-size: .75rem; color: #d6d6d6;
+  background: rgb(12 14 18 / .72); pointer-events: none;
+}
+.landing-sky-label, .landing-compass {
+  display: inline-block; white-space: nowrap; font-size: 11px; font-weight: 600; color: #f5f5f5;
+  padding: 2px 7px; border-radius: 999px; background: rgb(10 12 16 / .7); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .18);
+  pointer-events: none; user-select: none;
+}
+.landing-sky-label.below { opacity: .45; }
+.landing-compass { color: #c9d4e6; font-size: 10px; }
+.trajectory-scene.terrain-3d-frame { position: relative; height: clamp(320px, 52vh, 520px); margin: 14px 0; background: #03050a; }
+.trajectory-scene > div:first-child { position: absolute !important; inset: 0; }
+.landing-scene-readout {
+  position: absolute; left: 12px; top: 10px; z-index: 5; margin: 0; padding: 4px 10px; border-radius: 999px;
+  font-size: .75rem; color: #f5f5f5; background: rgb(12 14 18 / .72); pointer-events: none; font-variant-numeric: tabular-nums;
+}
+.landing-view-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.landing-view-switch button { min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text-secondary); }
+.landing-view-switch button[aria-pressed="true"] { color: var(--action-text); background: var(--action-fill); border-color: var(--action-fill); }
+.landing-view-switch button:disabled { opacity: .45; cursor: not-allowed; }
+.trajectory-label { color: #ffe7a8; }
+.landing-lander-marker { display: block; width: 12px; height: 12px; border-radius: 50%; background: #ffe7a8; box-shadow: 0 0 0 2px rgb(10 12 16 / .8), 0 0 12px #ffd27a; pointer-events: none; }

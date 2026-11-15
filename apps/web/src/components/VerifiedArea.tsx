@@ -2,23 +2,22 @@ import { lazy, Suspense, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { LunarFeature, SearchRequest, TerrainData } from "../lib/types";
 import type { CoverageCatalog, CoverageOutcome } from "../lib/planning";
-import { projectPolar, selectedCircle, unprojectPolar } from "../lib/coverage";
+import { projectPolar, selectedCircle } from "../lib/coverage";
 import { HemisphereDiscovery } from "./HemisphereDiscovery";
 import { CoarseAreaPreview } from "./CoarseAreaPreview";
 import { southernCoordinate } from "../lib/hemisphere";
 import { coordinate } from "../lib/format";
 import "./hemisphere.css";
 
-const TerrainScene = lazy(() => import("./TerrainScene").then(module => ({ default: module.TerrainScene })));
 const GlobeScene = lazy(() => import("./GlobeScene").then(module => ({ default: module.GlobeScene })));
 
-export function VerifiedArea({ catalog, request, features, terrain, outcome, pending, error, onChange, onRetry, actions }: {
-  terrain: TerrainData | null;
+export function VerifiedArea({ catalog, request, features, outcome, pending, error, onChange, onRetry, actions }: {
+  /** Kept for callers; the area step now uses the 3D Moon only. */
+  terrain?: TerrainData | null;
   catalog: CoverageCatalog; request: SearchRequest; features: LunarFeature[];
   outcome: CoverageOutcome | null; pending: boolean; error: string | null;
   onChange: (request: SearchRequest) => void; onRetry: () => void; actions: ReactNode;
 }) {
-  const [view, setView] = useState<"terrain" | "globe">("globe");
   const [local, setLocal] = useState(false);
   const localRegion = useRef<SearchRequest["region"]>({ selector_type: "circle", center: { latitude_deg: -89.9, longitude_deg_east: 0 }, search_radius_km: 3 });
   if (request.region.selector_type !== "southern_hemisphere" && request.region.selector_type !== "full_supported_region") localRegion.current = structuredClone(request.region);
@@ -32,6 +31,11 @@ export function VerifiedArea({ catalog, request, features, terrain, outcome, pen
   const circle = selectedCircle(request.region, features);
   const selectedFeature = request.region.selector_type === "feature_radius" ? features.find(feature => feature.id === request.region.resolved_feature_id) : undefined;
   const center = selectedFeature ? { latitude_deg: selectedFeature.latitude_deg, longitude_deg_east: selectedFeature.longitude_deg_east } : request.region.center ?? { latitude_deg: -89.9, longitude_deg_east: 0 };
+  // While a new area is being checked, keep showing the last result's layout
+  // (feedback row, preview panel) so the page doesn't collapse and re-expand.
+  const lastOutcome = useRef<CoverageOutcome | null>(outcome);
+  if (outcome) lastOutcome.current = outcome;
+  const shownOutcome = outcome ?? (pending ? lastOutcome.current : null);
   const coverageSummary = pending ? "Checking coverage…"
     : error ? "Coverage unavailable"
     : outcome?.status === "outside" ? "Outside detailed coverage"
@@ -56,7 +60,6 @@ export function VerifiedArea({ catalog, request, features, terrain, outcome, pen
     setSelectionError(""); setLocal(true);
     onChange({ ...request, region: { selector_type: "circle", center: coordinate, search_radius_km: radiusKm } });
   }
-  function select(x: number, y: number) { selectCoordinate(unprojectPolar(x, y)); }
   return <>
   {selectionError && <p className="guide-error" role="alert">{selectionError}</p>}
     <div className="area-scope-picker" role="group" aria-label="Search scope">
@@ -67,7 +70,7 @@ export function VerifiedArea({ catalog, request, features, terrain, outcome, pen
   {(wholeSurvey || fullRegion) && <p className="area-scope-explanation field-hint">{wholeSurvey ? "Ranks regional locations across the entire south using coarse horizons. Refine shortlisted areas with detailed local terrain." : "Compare prepared polar sites over the fixed October 2028 window."}</p>}
   <div className="area-layout">
     <div className="area-setup">
-    {!wholeSurvey && !fullRegion && <details className="area-editor">
+    {!wholeSurvey && !fullRegion && <details className="area-editor" open>
       <summary>Study area<span>{request.region.selector_type === "full_supported_region" ? "Full prepared region" : coordinate(center.latitude_deg, center.longitude_deg_east)}</span></summary>
       <div className="area-editor-content">
       <label className="field">Area selection<select aria-label="Area selection" value={request.region.selector_type} onChange={event => {
@@ -83,50 +86,37 @@ export function VerifiedArea({ catalog, request, features, terrain, outcome, pen
         const feature = features.find(item => item.id === event.target.value)!;
         onChange({ ...request, region: { ...request.region, resolved_feature_id: feature.id, input_text: feature.name, center: { latitude_deg: feature.latitude_deg, longitude_deg_east: feature.longitude_deg_east } } });
       }}>{features.map(feature => <option key={feature.id} value={feature.id} disabled={!landmarks.some(item => item.id === feature.id)}>{feature.name}{!landmarks.some(item => item.id === feature.id) ? " · outside coverage" : ""}</option>)}</select></label>}
-      {request.region.selector_type === "circle" && <div className="guide-fields"><label className="field">Latitude °S (negative)<input type="number" min="-90" max="0" step="any" value={center.latitude_deg} onChange={event => selectCoordinate({ ...center, latitude_deg: Number(event.target.value) })} /></label>
-        <label className="field">Longitude °E<input type="number" min="-180" max="179.999999" step="any" value={center.longitude_deg_east} onChange={event => selectCoordinate({ ...center, longitude_deg_east: Number(event.target.value) })} /></label></div>}
+      {request.region.selector_type === "circle" && <div className="guide-fields"><label className="field">Latitude °S (negative)<input type="number" min="-90" max="0" step="any" value={Number(center.latitude_deg.toFixed(6))} onChange={event => selectCoordinate({ ...center, latitude_deg: Number(event.target.value) })} /></label>
+        <label className="field">Longitude °E<input type="number" min="-180" max="179.999999" step="any" value={Number(center.longitude_deg_east.toFixed(6))} onChange={event => selectCoordinate({ ...center, longitude_deg_east: Number(event.target.value) })} /></label></div>}
       {request.region.selector_type !== "full_supported_region" && <label className="field">Search radius (km)<input type="number" min="1" max={catalog.public_limits.maximum_radius_km} step=".01" value={request.region.search_radius_km ?? ""} onChange={event => onChange({ ...request, region: { ...request.region, search_radius_km: event.target.value ? Number(event.target.value) : undefined } })} /></label>}
       {catalog.public_limits.maximum_radius_km > 5 && <p className="field-hint">Areas above 5 km are experimental and may take longer. The seven-day mission limit still applies.</p>}
-      <HemisphereDiscovery features={features} center={center} local={local} onExplore={() => { setLocal(false); setView("globe"); }} onSelect={coordinate => { setView("globe"); selectCoordinate(coordinate); }} />
+      <HemisphereDiscovery features={features} center={center} local={local} onExplore={() => setLocal(false)} onSelect={selectCoordinate} />
       <details className="area-coverage-details"><summary>Coverage details</summary>
         <p>Prepared sites are spaced {catalog.candidate_spacing_m} m apart. The grid excludes the exact pole.</p>
         <p>Local detailed searches cover up to {catalog.public_limits.maximum_radius_km} km radius. Use the full-region demo to compare across the dataset.</p>
       </details>
       </div>
     </details>}
-    <div className="area-view-switch" role="group" aria-label="Lunar view">
-      {([["globe", "3D Moon"], ["terrain", "Prepared polar terrain"]] as const).map(([mode, label]) => (
-        <button type="button" key={mode} aria-pressed={view === mode} onClick={() => setView(mode)}>{label}</button>
-      ))}
-    </div>
     <div className="area-next">
-      <p className="area-coverage-status" role="status">{coverageSummary}</p>
+      <p className={`area-coverage-status${!pending && shownOutcome?.status === "outside" ? " sr-only" : ""}`} role="status" aria-busy={pending}>{coverageSummary}</p>
       <div className="area-sidebar-actions">{actions}</div>
+      {/* Sits where "Continue" was, so the panel keeps its height when an area is outside coverage. */}
+      {shownOutcome?.status === "outside" && southernCoordinate(center) && <div className="area-outside-actions" aria-hidden={pending || undefined}>
+        <a className="text-button" href="#area-preview">Preview this area</a>
+      </div>}
     </div>
     {error && <div className="area-feedback"><p>{error}</p><button className="secondary-button" onClick={onRetry}>Retry coverage check</button></div>}
-    {outcome?.status === "outside" && <div className="area-feedback">
-      <p className="field-hint">Choose a prepared south-pole area to compare detailed mission results.</p>
-      {southernCoordinate(center) && <a className="text-button" href="#area-preview">Preview this area</a>}
-      <button className="text-button" onClick={() => selectCoordinate({ latitude_deg: -89.9, longitude_deg_east: 0 })}>Use a supported south-pole area</button>
-    </div>}
     </div>
     <div className="area-scene">
       <div className="area-3d-preview">
         <Suspense fallback={<p role="status">Loading the 3D Moon…</p>}>
-          {view === "globe" ? <GlobeScene onArea={selectArea} maximumRadiusKm={catalog.public_limits.maximum_radius_km}
+          <GlobeScene onArea={selectArea} maximumRadiusKm={catalog.public_limits.maximum_radius_km}
             preparedLabel={wholeSurvey ? "Southern hemisphere regional survey" : catalog.hemisphere_detailed ? "Southern hemisphere detailed local terrain" : catalog.label} selectedCenter={circle ? center : undefined} focusSelection={local}
             radiusKm={request.region.search_radius_km} timeRange={request.time_range} onPick={selectCoordinate} />
-            : terrain ? <TerrainScene terrain={terrain} candidates={[]} selected={null} onSelect={() => {}} onPick={select}
-              mode="terrain" layer="terrain" mapCandidates={[]} psr={null} features={[]}
-              studyArea={circle && center.latitude_deg <= -87 ? { x_m: circle.x, y_m: circle.y, radius_m: circle.radius } : undefined} />
-              : <div className="scene-empty">
-                <p>3D terrain is unavailable. Use the 3D Moon or enter coordinates.</p>
-                <button className="secondary-button" onClick={() => setView("globe")}>Show 3D Moon</button>
-              </div>}
         </Suspense>
       </div>
     </div>
   </div>
-  {!fullRegion && !wholeSurvey && <div id="area-preview" className="local-area-workspace" hidden={outcome?.status !== "outside" || !southernCoordinate(center)}><CoarseAreaPreview center={center} radiusKm={request.region.search_radius_km} /></div>}
+  {!fullRegion && !wholeSurvey && <div id="area-preview" className="local-area-workspace" hidden={shownOutcome?.status !== "outside" || !southernCoordinate(center)}><CoarseAreaPreview center={center} radiusKm={request.region.search_radius_km} /></div>}
   </>;
 }

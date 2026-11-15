@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { clpsMissions } from "../data/clps-missions";
-import { getHistoricReplay } from "../lib/experience-api";
-import type { CuratedSite, Replay } from "../lib/experience-api";
+import { getHistoricReplay, getHistoricTrajectory } from "../lib/experience-api";
+import type { CuratedSite, Replay, TrajectoryResult } from "../lib/experience-api";
 import { utcDate, utcTime } from "../lib/format";
 import "./clps-missions.css";
+
+const LandingScene = lazy(() => import("./LandingScene"));
+const TrajectoryScene = lazy(() => import("./TrajectoryScene"));
 
 const coordinateSource = "https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html";
 
@@ -50,6 +53,9 @@ export function MissionReplay({ site }: { site: CuratedSite }) {
   const [period, setPeriod] = useState<"landing" | "fortnight">("landing");
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [descentKey, setDescentKey] = useState(0);
+  const [trajectory, setTrajectory] = useState<TrajectoryResult | null>(null);
+  const [view, setView] = useState<"site" | "path">("site");
   const landing = replay?.landing_utc ?? site.landing_utc;
   const timeline = period === "fortnight" ? replay?.missionTimeline : replay?.timeline;
 
@@ -66,6 +72,17 @@ export function MissionReplay({ site }: { site: CuratedSite }) {
   }, [site.id, site.landing_utc]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    setTrajectory(null); setView("site");
+    getHistoricTrajectory(site.id, controller.signal).then(result => {
+      if (!controller.signal.aborted) setTrajectory(result);
+    }).catch(() => {
+      if (!controller.signal.aborted) setTrajectory({ trajectory: null, message: "The trajectory service could not be reached." });
+    });
+    return () => controller.abort();
+  }, [site.id]);
+
+  useEffect(() => {
     if (!playing || !timeline || index >= timeline.length - 1) return;
     const timer = window.setTimeout(() => setIndex(index + 1), 500);
     return () => window.clearTimeout(timer);
@@ -78,12 +95,25 @@ export function MissionReplay({ site }: { site: CuratedSite }) {
   }
 
   const sample = timeline?.[index];
+  const nasa = trajectory?.trajectory ?? null;
   const advancing = playing && index < (timeline?.length ?? 0) - 1;
   return <section className="clps-replay" aria-labelledby="clps-replay-title">
     <h3 id="clps-replay-title">Modeled landing replay</h3>
     {landing && <p>Touchdown · <time dateTime={landing}>{utcTime(landing)}</time></p>}
     <p>Coarse replay with a flat horizon. The model shows Sun and Earth geometry at the recorded landing point. Actual terrain shadows, lander orientation, and communications are outside this replay model.</p>
     {sample && timeline ? <>
+      <div className="landing-view-switch" role="group" aria-label="3D view">
+        <button type="button" aria-pressed={view === "site"} onClick={() => setView("site")}>Landing site</button>
+        <button type="button" aria-pressed={view === "path"} disabled={!nasa} onClick={() => setView("path")}>Path from Earth</button>
+        {trajectory && "message" in trajectory && <span className="field-hint">{trajectory.message}</span>}
+      </div>
+      {view === "path" && nasa ? <Suspense fallback={<div className="trajectory-scene terrain-3d-frame" role="status"><p className="landing-scene-loading">Loading NASA trajectory…</p></div>}>
+        <TrajectoryScene trajectory={nasa} />
+      </Suspense> : <Suspense fallback={<div className="landing-scene terrain-3d-frame" role="status"><p className="landing-scene-loading">Loading 3D landing view…</p></div>}>
+        <LandingScene siteId={site.id} terrain={replay?.terrain} time={Date.parse(sample.time_utc)} descent={nasa?.descent} descentKey={descentKey}
+          sun={{ azimuth: sample.sun_azimuth_deg, elevation: sample.sun_elevation_deg, visible: sample.sun_visible }}
+          earth={{ azimuth: sample.earth_azimuth_deg, elevation: sample.earth_elevation_deg, visible: sample.earth_visible }} />
+      </Suspense>}
       <div className="clps-replay-controls">
         {!!replay?.missionTimeline?.length && <label className="field">Replay period
           <select value={period} onChange={event => selectPeriod(event.target.value as typeof period)}>
@@ -100,6 +130,12 @@ export function MissionReplay({ site }: { site: CuratedSite }) {
           setIndex(nearestSample(timeline, landing));
           setPlaying(false);
         }}>Jump to touchdown</button>
+        {nasa && <button className="secondary-button" onClick={() => {
+          setView("site");
+          setIndex(nearestSample(timeline, landing));
+          setPlaying(false);
+          setDescentKey(value => value + 1);
+        }}>Play NASA descent</button>}
       </div>
       {period === "fortnight" && <p>This model continues for 14 days even if the mission ended earlier.</p>}
       <label className="field">Replay time · <time dateTime={sample.time_utc}>{utcTime(sample.time_utc)}</time>
