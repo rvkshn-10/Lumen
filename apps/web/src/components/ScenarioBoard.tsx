@@ -13,6 +13,8 @@ import { sampleIndexAt } from "../lib/mission-window";
 import { HorizonReview } from "./HorizonReview";
 import { CopilotExplanation } from "./CopilotExplanation";
 import { SolarGeneration } from "./SolarGeneration";
+import { PowerUse } from "./PowerUse";
+import { siteFrame, useLocalTerrain } from "../lib/local-terrain";
 import { CandidateResults } from "./CandidateResults";
 import { Icon } from "./Icon";
 import "./scenario-board.css";
@@ -162,11 +164,12 @@ function Charts({ row, synthetic, targetTime, cutoff }: { row: Scenario; synthet
   </section>;
 }
 
+const noPoints: never[] = [];
 const boardViews = ["Overview", "Timeline", "Analysis"] as const;
 type BoardView = typeof boardViews[number];
 const overviewMetrics = [metrics[1], metrics[0], metrics[2], metrics[3]];
 
-function ComparisonValues({ rows }: { rows: Scenario[] }) {
+function ComparisonValues({ rows, onDetails, onChoose }: { rows: Scenario[]; onDetails?: (row: Scenario, index: number) => void; onChoose?: (row: Scenario, index: number) => void }) {
   const timeRange = rows[0].request.time_range;
   const commonWindow = rows.every(({ request }) =>
     request.time_range.start_utc === timeRange.start_utc && request.time_range.end_utc === timeRange.end_utc);
@@ -183,6 +186,10 @@ function ComparisonValues({ rows }: { rows: Scenario[] }) {
           {rows.map((row, index) => <th scope="col" key={row.key}>
             {compareSiteLabel(index)}<small>{label(row)}</small>
             {!commonWindow && <small>{utcRange(row.request.time_range)}</small>}
+            {(onDetails || onChoose) && <span className="compare-column-actions">
+              {onDetails && <button type="button" className="text-button" onClick={() => onDetails(row, index)}>More details</button>}
+              {onChoose && <button type="button" className="secondary-button" onClick={() => onChoose(row, index)}>Choose this site</button>}
+            </span>}
           </th>)}
         </tr></thead>
         <tbody>{overviewMetrics.map(metric => {
@@ -204,13 +211,20 @@ function ComparisonValues({ rows }: { rows: Scenario[] }) {
   </section>;
 }
 
-export function ScenarioBoard({ result, audience, onInspect, onSummarySelection, initialRows, selectInitialRows = false, example = false, terrain }: {
+export function ScenarioBoard({ result, audience, onInspect, onSummarySelection, initialRows, selectInitialRows = false, example = false, terrain, initialSelectedIds, hideRankings = false, onDetails, onChoose }: {
   result?: ScenarioResult; audience: Audience; onInspect?: (id: string) => void;
   onSummarySelection?: (sites: Candidate[]) => void; initialRows?: Scenario[]; selectInitialRows?: boolean;
   example?: boolean; terrain?: TerrainData | null;
+  /** Site ids picked on the leaderboard, in slot order. */
+  initialSelectedIds?: string[];
+  hideRankings?: boolean;
+  onDetails?: (row: Scenario, label: string) => void;
+  onChoose?: (row: Scenario, label: string) => void;
 }) {
   const [rows, setRows] = useState<Scenario[]>(() => initialRows ?? result?.candidates.map(site => ({ site, request: result.request, key: scenarioKey(site.id, result.request) })) ?? []);
-  const [selected, setSelected] = useState<string[]>(() => rows.slice(0, selectInitialRows ? COMPARE_LIMIT : 2).map(row => row.key));
+  const [selected, setSelected] = useState<string[]>(() => initialSelectedIds?.length
+    ? initialSelectedIds.flatMap(id => rows.find(row => row.site.id === id)?.key ?? []).slice(0, COMPARE_LIMIT)
+    : rows.slice(0, selectInitialRows ? COMPARE_LIMIT : 2).map(row => row.key));
   const [view, setView] = useState<BoardView>("Overview");
   const [analysisVisited, setAnalysisVisited] = useState(false);
   const boardId = useId();
@@ -301,7 +315,8 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
   function inspectCutoff(row: Scenario, cutoff: Cutoff) {
     openEvidence(row, Date.parse(cutoff.time_utc), cutoff);
   }
-  const mapSites = [...new Map(picked.map(row => [row.site.id, row.site])).values()];
+  const mapSites = useMemo(() => [...new Map(picked.map(row => [row.site.id, row.site])).values()], [picked]);
+  const sharedTerrain = useLocalTerrain(terrainOpen && terrain && mapSites.every(site => site.latitude_deg <= -86.9) ? siteFrame(mapSites) : null, terrain ?? null);
   const alternatives = [...new Map([...(result?.alternatives ?? []), ...rows.flatMap(row => row.alternatives ?? [])]
     .map(option => [option.suggestion_id ?? `${option.kind}:${option.id}:${JSON.stringify(option.request)}`, option])).values()];
   const activeRowsBySite = new Map<string, Scenario>();
@@ -465,7 +480,10 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     </div>}
 
     <div className="scenario-overview" role="tabpanel" id={ids("Overview").panel} aria-labelledby={ids("Overview").tab} hidden={view !== "Overview"}>
-      {picked.length > 0 && <ComparisonValues rows={picked} />}
+      {picked.length > 0 && <ComparisonValues rows={picked}
+        onDetails={onDetails ? (row, index) => onDetails(row, comparisonLabel(row, index)) : undefined}
+        onChoose={onChoose ? (row, index) => onChoose(row, comparisonLabel(row, index)) : undefined} />}
+      {picked.length > 0 && <PowerUse rows={picked} name={comparisonLabel} start={start} end={end} />}
       {picked.length > 0 && <SolarGeneration rows={picked} name={comparisonLabel} start={start} end={end} />}
       {picked.length < 2 && canPickMore && <p className="compare-selection-hint">Add {picked.length ? "another site" : "a site"} to start comparing.</p>}
       {rows.length > 0 && <details className="compare-management">
@@ -560,12 +578,12 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
                 <option value="map">2D map</option>
               </select>
             </label>
-            {sceneSample ? <Suspense fallback={<p role="status">Loading shared terrain…</p>}><TerrainScene terrain={terrain} candidates={activeSites}
+            {sceneSample ? <Suspense fallback={<p role="status">Loading shared terrain…</p>}><TerrainScene terrain={sharedTerrain ?? terrain} candidates={activeSites}
               selected={activeSites[0].id} onSelect={id => {
                 const row = activeRowsBySite.get(id);
                 if (row) openEvidence(row, clock);
               }} compare={picked.map(row => row.site.id)} comparisonSites={mapSites} sample={sceneSample} mode={terrainView} layer="terrain"
-              mapCandidates={result?.map_candidates ?? []} psr={null} features={[]} /></Suspense>
+              mapCandidates={result?.map_candidates ?? noPoints} psr={null} features={[]} /></Suspense>
               : <p>No selected scenario covers this clock time.</p>}
             <div className="scenario-tools">{mapSites.map(site => {
               const slots = picked.flatMap((row, index) => row.site.id === site.id ? [index] : []);
@@ -629,7 +647,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
         </details>}
       </>}
     </div>
-    {result && onInspect && <CandidateResults result={result} onSelect={onInspect} onToggleCompare={toggleCandidate}
+    {result && onInspect && !hideRankings && <CandidateResults result={result} onSelect={onInspect} onToggleCompare={toggleCandidate}
       compared={compared} comparisonFull={compareFull} />}
     {busy && <p role="status">Analyzing scenario…</p>}
     {error && <p role="alert" className="guide-error">{error}</p>}

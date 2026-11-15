@@ -63,9 +63,9 @@ export function VerifiedArea({ catalog, request, features, outcome, pending, err
   return <>
   {selectionError && <p className="guide-error" role="alert">{selectionError}</p>}
     <div className="area-scope-picker" role="group" aria-label="Search scope">
-      <button type="button" aria-pressed={wholeSurvey} disabled={!catalog.hemisphere_survey} onClick={() => chooseScope("southern_hemisphere")}><strong>Survey the hemisphere</strong><span>{catalog.hemisphere_survey ? "827 regional locations · about 150 km apart" : "Survey data unavailable on this service"}</span></button>
-      <button type="button" aria-pressed={!wholeSurvey && !fullRegion} onClick={() => chooseScope("local")}><strong>Search a local area</strong><span>Detailed terrain · up to {catalog.public_limits.maximum_radius_km} km radius</span></button>
-      <button type="button" aria-pressed={fullRegion} onClick={() => chooseScope("full_supported_region")}><strong>Compare the polar cap</strong><span>Prepared October 2028 window</span></button>
+      <button type="button" aria-pressed={wholeSurvey} disabled={!catalog.hemisphere_survey} onClick={() => chooseScope("southern_hemisphere")}><strong>Entire hemisphere</strong><span>{catalog.hemisphere_survey ? "Rank 827 regional locations across the south" : "Needs the NASA LOLA hemisphere data installed"}</span></button>
+      <button type="button" aria-pressed={!wholeSurvey && !fullRegion} onClick={() => chooseScope("local")}><strong>Local area</strong><span>Detailed terrain · up to {catalog.public_limits.maximum_radius_km} km radius</span></button>
+      <button type="button" aria-pressed={fullRegion} onClick={() => chooseScope("full_supported_region")}><strong>Whole polar cap</strong><span>All {catalog.candidate_count.toLocaleString()} sites, 87°S to the pole</span></button>
     </div>
   {(wholeSurvey || fullRegion) && <p className="area-scope-explanation field-hint">{wholeSurvey ? "Ranks regional locations across the entire south using coarse horizons. Refine shortlisted areas with detailed local terrain." : "Compare prepared polar sites over the fixed October 2028 window."}</p>}
   <div className="area-layout">

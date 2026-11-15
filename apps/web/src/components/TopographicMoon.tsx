@@ -65,7 +65,7 @@ export const TopographicMoon = memo(function TopographicMoon({ exaggeration, fea
       const vertices: number[] = [], coordinates: number[] = [];
       const emit = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, depth: number) => {
         const edge = Math.max(a.distanceTo(b), b.distanceTo(c), c.distanceTo(a));
-        if (depth < 6 && edge > edgeLimit && a.clone().add(b).add(c).divideScalar(3).distanceTo(center) < region + edge) {
+        if (depth < 5 && edge > edgeLimit && a.clone().add(b).add(c).divideScalar(3).distanceTo(center) < region + edge) {
           const ab = a.clone().add(b).normalize().multiplyScalar(2), bc = b.clone().add(c).normalize().multiplyScalar(2), ca = c.clone().add(a).normalize().multiplyScalar(2);
           emit(a, ab, ca, depth + 1); emit(ab, b, bc, depth + 1); emit(ca, bc, c, depth + 1); emit(ab, bc, ca, depth + 1);
           return;

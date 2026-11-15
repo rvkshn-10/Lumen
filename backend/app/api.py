@@ -11,6 +11,7 @@ from app.services.bounded_analysis import bounded_analysis
 from app.services.dataset import DataUnavailable, dataset
 from app.services.ephemeris import load_kernels
 from app.services.json_response import ScientificJSONResponse as JSONResponse
+from app.services.local_terrain import local_terrain
 from app.services.profiling import phase
 from app.services.repository import is_tiled, read_asset, release_metadata
 from app.services.search import search
@@ -111,6 +112,17 @@ def terrain() -> dict:
     except (DataUnavailable, OSError, ValueError) as exc:
         raise HTTPException(
             status_code=503, detail={"code": "scientific_data_not_prepared", "message": str(exc)}
+        ) from exc
+
+
+@router.get("/terrain/local")
+def terrain_local(x_m: float, y_m: float, half_km: float = 6) -> dict:
+    """NASA LOLA 80 m/px terrain around one point, for close-up site scenes."""
+    try:
+        return local_terrain(x_m, y_m, half_km)
+    except (DataUnavailable, OSError, ValueError) as exc:
+        raise HTTPException(
+            status_code=503, detail={"code": "local_terrain_unavailable", "message": str(exc)}
         ) from exc
 
 
