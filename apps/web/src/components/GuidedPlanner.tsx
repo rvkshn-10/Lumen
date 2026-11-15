@@ -343,7 +343,7 @@ export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appear
     {inspecting && <p role="status">Loading this location’s evidence…</p>}
     {result && modal === "site" && site && <PlanningEvidence key={`${result.search_id}-${site.id}`} site={site} result={result} compare={summarySites.map(item => item.id)} terrain={resultTerrain} manifest={manifest} psr={result && usesHemisphereTerrain(result.request) ? null : psr} features={result && usesHemisphereTerrain(result.request) ? [] : features} onExplore={id => void inspect(id)} stale={stale} onDelay={hours => { update(shiftWindow(result.request, hours)); setModal(null); go(2); }} onClose={() => setModal(null)} />}
     {result && modal === "summary" && <MissionSummary result={result} sites={summarySites} coverage={appliedCoverage} stale={stale} onClose={() => setModal(null)} />}
-    {details && <SiteDetails key={details.site.id} site={details.site} label={details.label} start={details.start} end={details.end} overview={terrain} onClose={() => setDetails(null)} />}
+    {details && <SiteDetails key={details.site.id} site={details.site} label={details.label} start={details.start} end={details.end} overview={resultTerrain} onClose={() => setDetails(null)} />}
     {mapOpen && result && <SiteLocations sites={rankedLocations} eligible={eligibleLocations} eligibleTotal={result.counts.temporal_pass}
       dates={result.request.time_range} onClose={() => setMapOpen(false)} onInspect={id => { const site = result.candidates.find(item => item.id === id); if (site) openDetails(site, `Candidate ${site.rank}`); }}
       onToggleCompare={id => { if (result.candidates.some(site => site.id === id)) togglePick(id); }}

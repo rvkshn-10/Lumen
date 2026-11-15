@@ -40,7 +40,8 @@ export function SiteDetails({ site, label, start: windowStart, end: windowEnd, o
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [view, setView] = useState<"sky" | "terrain">("sky");
-  const frame = useMemo(() => siteFrame([site], 4), [site]);
+  // Only the polar cap is in the 80 m south-pole DEM; elsewhere keep the terrain the search returned.
+  const frame = useMemo(() => site.latitude_deg <= -86.9 ? siteFrame([site], 4) : null, [site]);
   const terrain = useLocalTerrain(frame, overview);
   const local = terrain !== overview;
   useEffect(() => {

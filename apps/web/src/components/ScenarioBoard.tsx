@@ -316,7 +316,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     openEvidence(row, Date.parse(cutoff.time_utc), cutoff);
   }
   const mapSites = useMemo(() => [...new Map(picked.map(row => [row.site.id, row.site])).values()], [picked]);
-  const sharedTerrain = useLocalTerrain(terrainOpen && terrain ? siteFrame(mapSites) : null, terrain ?? null);
+  const sharedTerrain = useLocalTerrain(terrainOpen && terrain && mapSites.every(site => site.latitude_deg <= -86.9) ? siteFrame(mapSites) : null, terrain ?? null);
   const alternatives = [...new Map([...(result?.alternatives ?? []), ...rows.flatMap(row => row.alternatives ?? [])]
     .map(option => [option.suggestion_id ?? `${option.kind}:${option.id}:${JSON.stringify(option.request)}`, option])).values()];
   const activeRowsBySite = new Map<string, Scenario>();
