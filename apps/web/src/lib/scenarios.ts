@@ -16,6 +16,8 @@ export interface Scenario {
   label?: string;
   constraint_status?: SiteDetail["constraint_status"];
   alternatives?: Alternative[];
+  provenance?: SiteDetail["provenance"];
+  warnings?: string[];
 }
 export type Alternative = ContractAlternative & { site_id?: string };
 export type ScenarioResult = SearchResponse & { alternatives?: Alternative[] };
@@ -84,7 +86,7 @@ export async function loadScenario(id: string, request: SearchRequest, signal: A
   }));
   const applied = detail.request ?? request;
   return { key: scenarioKey(id, applied), request: applied, constraint_status: detail.constraint_status,
-    alternatives: detail.alternatives,
+    alternatives: detail.alternatives, provenance: detail.provenance, warnings: detail.warnings,
     site: { ...detail.site, rank: 0, score: detail.score, criteria_scores: detail.criteria_scores,
       metrics: detail.metrics, timeline: detail.timeline, horizon: detail.horizon, events, visibilityIntervals: detail.intervals, power: detail.power, dte: detail.dte } };
 }

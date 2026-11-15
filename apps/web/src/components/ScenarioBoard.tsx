@@ -13,6 +13,7 @@ import { sampleIndexAt } from "../lib/mission-window";
 import { HorizonReview } from "./HorizonReview";
 import { CopilotExplanation } from "./CopilotExplanation";
 import { PowerUse } from "./PowerUse";
+import { EngineerComparison } from "./EngineerComparison";
 import { siteFrame, useLocalTerrain } from "../lib/local-terrain";
 import { CandidateResults } from "./CandidateResults";
 import { Icon } from "./Icon";
@@ -225,8 +226,8 @@ function ComparisonValues({ rows, onDetails, onChoose, detail = "plain" }: { row
             {compareSiteLabel(index)}
             <span className="compare-scenario-name"><strong>{label(row)}</strong><small>{utcRange(row.request.time_range)}</small></span>
             {(onDetails || onChoose) && <span className="compare-column-actions">
-              {onDetails && <button type="button" className="text-button" onClick={() => onDetails(row, index)}>More details</button>}
               {onChoose && <button type="button" className="secondary-button" onClick={() => onChoose(row, index)}>Choose this site</button>}
+              {onDetails && <button type="button" className="text-button" onClick={() => onDetails(row, index)}>More details</button>}
             </span>}
           </th>)}
         </tr></thead>
@@ -259,7 +260,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
   onDetails?: (row: Scenario, label: string) => void;
   onChoose?: (row: Scenario, label: string) => void;
 }) {
-  const [rows, setRows] = useState<Scenario[]>(() => initialRows ?? result?.candidates.map(site => ({ site, request: result.request, key: scenarioKey(site.id, result.request) })) ?? []);
+  const [rows, setRows] = useState<Scenario[]>(() => initialRows ?? result?.candidates.map(site => ({ site, request: result.request, key: scenarioKey(site.id, result.request), provenance: result.provenance, warnings: result.warnings })) ?? []);
   const [selected, setSelected] = useState<string[]>(() => initialSelectedIds?.length
     ? initialSelectedIds.flatMap(id => rows.find(row => row.site.id === id)?.key ?? []).slice(0, COMPARE_LIMIT)
     : rows.slice(0, selectInitialRows ? COMPARE_LIMIT : 2).map(row => row.key));
@@ -538,6 +539,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
         onDetails={onDetails ? (row, index) => onDetails(row, comparisonLabel(row, index)) : undefined}
         onChoose={onChoose ? (row, index) => onChoose(row, comparisonLabel(row, index)) : undefined} />}
       {picked.length > 0 && <PowerUse rows={picked} name={comparisonLabel} start={start} end={end} />}
+      {picked.length > 0 && detail === "engineer" && <EngineerComparison rows={picked} />}
       {picked.length > 0 && detail === "engineer" && <section className="compare-assumptions" aria-label="Exact values and assumptions">
         <h3>Assumptions behind these values</h3>
         <dl>

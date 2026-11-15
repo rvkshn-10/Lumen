@@ -17,7 +17,7 @@
 .power-use-axis { display: grid; grid-template-columns: repeat(3, 1fr); margin: .4rem 0 1rem; padding-inline-start: 4rem; color: var(--text-secondary); font-size: .8rem; text-align: center; }
 .power-use-axis > :first-child { text-align: left; } .power-use-axis > :last-child { text-align: right; }
 .power-use-axis small { display: block; }
-.power-use-table td, .power-use-table th { font-variant-numeric: tabular-nums; }
+.power-use .power-use-table td, .power-use .power-use-table th { font-variant-numeric: tabular-nums; text-align: center; vertical-align: middle; width: auto; }
 .power-use-surplus { color: var(--text-primary); }
 .power-use-short { color: #d4644b; }
 .power-use-note { color: var(--text-secondary); font-size: .85rem; max-width: 52rem; }

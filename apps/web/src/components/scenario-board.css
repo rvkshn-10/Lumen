@@ -531,6 +531,28 @@
 .compare-assumptions dd { margin: .15rem 0 0; color: var(--text-secondary); line-height: 1.5; }
 .compare-clock-help { color: var(--text-secondary); max-width: 52rem; line-height: 1.5; margin: .2rem 0 .8rem; }
 .compare-detail-toggle button { white-space: nowrap; }
+.compare-column-actions { display: flex; flex-direction: column; align-items: center; gap: .35rem; margin-top: .6rem; }
+.compare-column-actions .text-button { font-size: .88rem; min-height: 44px; }
+.engineer-comparison { margin-top: 2rem; }
+.engineer-comparison > header p { color: var(--text-secondary); line-height: 1.5; }
+.engineer-section { margin-top: 1.6rem; }
+.engineer-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+.engineer-table { width: 100%; min-width: 35rem; margin: 0; table-layout: fixed; border-collapse: collapse; font-size: .9rem; }
+.engineer-table :is(th, td) { text-align: center; vertical-align: middle; padding: .8rem 1rem; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.engineer-table th:first-child { width: 30%; text-align: left; }
+.engineer-table th { font-weight: 550; }
+.engineer-table thead { background: var(--surface); }
+.engineer-table tbody tr:last-child > * { border-bottom: 0; }
+.engineer-table code { display: block; margin-top: .25rem; font-size: .72rem; color: var(--text-secondary); font-weight: 400; }
+.engineer-scenarios { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 23rem), 1fr)); gap: 1rem; margin-top: 1.6rem; }
+.engineer-scenario { padding: 1.2rem; border: 1px solid var(--line); border-radius: 14px; }
+.engineer-scenario h3 { margin-top: 0; }
+.engineer-scenario dl { margin: 0; }
+.engineer-scenario dl > div + div { margin-top: 1rem; }
+.engineer-scenario dt { font-size: .85rem; font-weight: 600; }
+.engineer-scenario dd { margin: .25rem 0 0; color: var(--text-secondary); font-size: .85rem; line-height: 1.6; overflow-wrap: anywhere; }
+.engineer-scenario code { font-size: .78rem; }
+.engineer-weight { display: block; }
 @media (max-width: 560px) {
   .compare-toolbar { flex-wrap: wrap; }
   .compare-detail-toggle { order: 3; margin-inline-start: 0; }
