@@ -19,6 +19,8 @@ dependencies = [
 [project.optional-dependencies]
 performance = ["numba>=0.61,<1"]
 profiling = ["ittapi>=1,<2"]
+openvino = ["openvino>=2025.4.1,<2027"]
+copilot = ["openvino-genai==2026.4.1.0"]
 dev = [
   "httpx>=0.28,<1",
   "pytest>=8.4,<9",
@@ -28,6 +30,9 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["app*"]
+
+[tool.setuptools.package-data]
+"app.services" = ["horizon_mlp_v1.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

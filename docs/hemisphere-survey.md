@@ -1,7 +1,6 @@
 # Whole southern hemisphere ranking
 
-Choose **Area selection → Whole southern hemisphere · regional survey** in the
-planner. Select a mission window of up to seven days and ranking priorities, then
+Choose **Survey the hemisphere** above the Moon in the planner. Select a mission window of up to seven days and ranking priorities, then
 run the normal search. It ranks 827 regional locations across the south and
 returns five shortlisted sites plus eligible map points. **Refine Candidate ·
 5 km** opens a dense local search while preserving the mission and constraints.
@@ -26,7 +25,7 @@ integration independently of the scientific checks described below. Screenshots
 and its machine-readable report are written to `data/cache/hemisphere-ui/`.
 Desktop (1440 px) and mobile (390 px) checks passed: scope selection, truthful
 survey review, refinement outside advanced controls, retained dates, no horizontal
-overflow and no page errors. The frontend suite passed 71 tests and the production
+overflow and no page errors. The frontend suite passed 85 tests and the production
 build passed after integration.
 
 This is a regional survey, not an exhaustive ranking of every 500 m location.
@@ -64,6 +63,18 @@ The existing `POST /api/v1/candidates/search` accepts a region containing only
 `{"selector_type":"southern_hemisphere"}` and the usual mission inputs. Centre
 and radius are disallowed. The prepared polar-cap demo is a separate selector.
 Site inspection, shifted windows and exports use the survey geometry.
+
+## GitHub UI integration
+
+The local integration branch merges GitHub `main` through `b900c3b` (solar generation
+comparison and consistent appearance). The masthead, page layouts, appearance
+settings, mission fields and comparison board come from that version. Hemisphere
+scope controls use its monochrome theme and stack at mobile widths. The main
+scene remains mounted when opening the demo comparison as well as changing stages.
+Local result views use the returned LOLA mesh with its east/north coordinate basis;
+survey results use the globe rather than an unrelated polar mesh.
+The combined backend regression suite passed 170 tests, with three skips. A real
+post-merge HTTP survey ranked all 827 locations and returned five candidates.
 
 ## Validation
 

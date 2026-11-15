@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
@@ -33,6 +34,7 @@ def main():
         page.route("**/api/v1/candidates/search", capture_search)
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(options.url + "/?parity")
+        page.locator(".area-editor > summary").click()
         page.get_by_role("combobox", name="Area selection", exact=True).select_option("full_supported_region")
         page.get_by_role("button", name="Continue to mission").click()
         page.get_by_role("button", name="Apply October 2028 demo window").click()
@@ -44,10 +46,41 @@ def main():
         (options.output / "analysis.json").write_text(json.dumps(result), encoding="utf-8")
         board = page.get_by_role("region", name="Scenario board", exact=True)
         expect(board).to_be_visible()
-        boxes = board.get_by_role("checkbox")
+        comparison = board.get_by_role("region", name="Comparison values", exact=True)
+        picker = comparison.get_by_role("combobox", name="Site in column 1", exact=True)
+        original = picker.input_value()
+        first, replacement = result["candidates"][0], result["candidates"][2]
+        first_metric = comparison.locator(f'[data-metric="{first["id"]}:earth_visibility_fraction"]')
+        replacement_metric = comparison.locator(f'[data-metric="{replacement["id"]}:earth_visibility_fraction"]')
+        picker.select_option(label=f'Candidate {replacement["rank"]}')
+        expect(first_metric).to_have_count(0)
+        expect(replacement_metric).to_be_visible()
+        assert float(replacement_metric.get_attribute("data-raw")) == replacement["metrics"]["earth_visibility_fraction"]
+        picker.select_option(value=original)
+        expect(first_metric).to_be_visible()
+        expect(replacement_metric).to_have_count(0)
+
+        scenario_editor = board.locator(".compare-management > summary")
+        scenario_editor.click()
+        scenarios = board.get_by_role("region", name="Scenarios", exact=True)
+        boxes = scenarios.get_by_role("checkbox")
         for index in range(4):
             boxes.nth(index).check()
-        expect(board.get_by_text("Shared terrain at the compare clock", exact=True)).to_be_visible()
+        expect(comparison).to_be_visible()
+        values = comparison.locator("[data-metric]").evaluate_all("""elements => elements.map(el => {
+            const key = el.dataset.metric.split(':').at(-1);
+            return {key: el.dataset.metric, raw: Number(el.dataset.raw), displayed: el.textContent.trim(),
+                scale: key.endsWith('_fraction') ? 100 : key === 'energy_wh' ? 0.001 : 1,
+                decimals: key === 'energy_wh' ? 2 : 1};
+        })""")
+        assert len(values) == 16
+        (options.output / "ui.json").write_text(json.dumps({"values": values}), encoding="utf-8")
+        page.screenshot(path=str(options.output / "desktop.png"), full_page=True)
+
+        board.get_by_role("tab", name="Timeline", exact=True).click()
+        board.locator("summary").filter(has_text="Upcoming cutoffs").click()
+        expect(board.get_by_role("region", name="Upcoming cutoffs", exact=True)).to_be_visible()
+        board.locator("summary").filter(has_text="Shared terrain at the compare clock").click()
         page.wait_for_function("window.__lumenScene?.dump().samples.filter(s => s.view === 'terrain-pin').length === 4")
         slider = board.get_by_role("slider", name="Compare time")
         maximum = int(slider.get_attribute("max"))
@@ -62,29 +95,27 @@ def main():
             page.wait_for_timeout(150)
             samples.extend(page.evaluate("window.__lumenScene.dump().samples"))
         (options.output / "scene.json").write_text(json.dumps({"samples": samples}), encoding="utf-8")
-        values = board.locator(".scenario-table [data-metric]").evaluate_all("""elements => elements.flatMap(el => {
-            const key = el.dataset.metric.split(':').at(-1);
-            if (key === 'sunset' || key === 'earthset') return [];
-            return [{key: el.dataset.metric, raw: Number(el.dataset.raw), displayed: el.textContent.trim(),
-                scale: key.endsWith('_fraction') ? 100 : key === 'energy_wh' ? 0.001 : 1,
-                decimals: key === 'energy_wh' ? 2 : 1}];
-        })""")
-        assert len(values) == 16
-        (options.output / "ui.json").write_text(json.dumps({"values": values}), encoding="utf-8")
-        page.screenshot(path=str(options.output / "desktop.png"), full_page=True)
         # Date duplication must obtain new live science, not duplicate a response.
-        board.get_by_role("button", name="Duplicate & change date", exact=True).first.click()
-        board.locator('input[type="datetime-local"]').fill("2028-10-02T00:00")
+        board.get_by_role("tab", name="Overview", exact=True).click()
+        if not scenarios.is_visible():
+            scenario_editor.click()
+        board.locator(".compare-row-menu > summary").first.click()
+        board.get_by_role("button", name="Duplicate & change date", exact=True).click()
+        board.get_by_label(re.compile("^New start date for ")).fill("2028-10-02T00:00")
         with page.expect_response(lambda response: response.url.endswith("/analysis"), timeout=135000) as duplicate:
             board.get_by_role("button", name="Analyze the new date", exact=True).click()
         assert duplicate.value.ok, duplicate.value.text()
-        expect(board.locator(".scenario-table tbody tr")).to_have_count(5)
+        expect(board.locator(".compare-scenario-list li")).to_have_count(5)
         detail = duplicate.value.json()
         if detail["constraint_status"]["passes"] is False:
-            expect(board.get_by_text("Fails mission limits · see Try instead", exact=True)).to_be_visible()
+            expect(board.get_by_text("Falls short of mission limits", exact=True)).to_be_visible()
         # Compact screen: all row selection controls remain usable.
         page.set_viewport_size({"width": 390, "height": 844})
-        expect(board.get_by_role("checkbox").first).to_be_visible()
+        expect(boxes.first).to_be_visible()
+        boxes.first.uncheck()
+        expect(boxes.first).not_to_be_checked()
+        boxes.first.check()
+        expect(boxes.first).to_be_checked()
         page.screenshot(path=str(options.output / "mobile.png"), full_page=True)
         # The curated replay consumes the actual nested Track A response.
         page.get_by_role("button", name="Choose another area", exact=True).click()
@@ -95,7 +126,7 @@ def main():
         expect(page.locator('[data-metric="apollo-12:sun_elevation_deg"]')).to_have_text("5.1°", timeout=135000)
         assert not errors, errors
         browser.close()
-    print(f"Verified four-site terrain, 10 scene times, {len(values)} UI values, date duplication, mobile and historic replay.")
+    print(f"Verified site switching, four-site terrain, 10 clock times, {len(values)} UI values, date duplication, mobile and replay.")
 
 
 if __name__ == "__main__":

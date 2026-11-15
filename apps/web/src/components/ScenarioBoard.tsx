@@ -1,10 +1,18 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { coordinate, downloadTimelineCsv, hours, percent, utcTime } from "../lib/format";
-import { scenarioVerdict } from "../lib/explanations";
-import { COMPARE_LIMIT, MAX_SCENARIOS, SITE_COLORS, alternativeScenario, batteryMargin, loadScenario, nextEvent, sampledEvents, scenarioKey, scenarioShareHash, scenarioWindow, visibilityRuns } from "../lib/scenarios";
+import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
+import { coordinate, downloadTimelineCsv, hours, percent, utcRange, utcTime } from "../lib/format";
+import { COMPARE_LIMIT, MAX_SCENARIOS, alternativeScenario, batteryMargin, loadScenario, nextEvent, sampledEvents, scenarioKey, scenarioShareHash, scenarioWindow, visibilityRuns } from "../lib/scenarios";
 import type { Candidate, TerrainData } from "../lib/types";
-import { COMPARE_COLORS, sampleIndexAt } from "../lib/sky-geometry";
-import type { Alternative, Audience, Scenario, ScenarioResult } from "../lib/scenarios";
+import { COMPARE_COLORS } from "../lib/sky-geometry";
+import type { Alternative, Audience, LunarEvent, Scenario, ScenarioResult } from "../lib/scenarios";
+import { LaunchSlipComparison } from "./LaunchSlipComparison";
+import { PoweredContactWindow } from "./PoweredContactWindow";
+import { CutoffTerrainEvidence } from "./CutoffTerrainEvidence";
+import { MissionWindowCheck } from "./MissionWindowCheck";
+import { sampleIndexAt } from "../lib/mission-window";
+import { HorizonReview } from "./HorizonReview";
+import { CopilotExplanation } from "./CopilotExplanation";
+import { SolarGeneration } from "./SolarGeneration";
+import { Icon } from "./Icon";
 import "./scenario-board.css";
 
 const GlobeScene = lazy(() => import("./GlobeScene").then(module => ({ default: module.GlobeScene })));
@@ -25,7 +33,9 @@ function Metric({ row, metric }: { row: Scenario; metric: typeof metrics[number]
   return number == null ? <span>Unavailable</span> : <span {...metricAttributes(row.site.id, metric.key, number)}>{metric.format(number)}</span>;
 }
 
-function EventCountdown({ row, type, clock }: { row: Scenario; type: "sunset" | "earthset"; clock: number }) {
+type Cutoff = LunarEvent & { type: "sunset" | "earthset"; refined: boolean };
+
+function EventCountdown({ row, type, clock, onInspect }: { row: Scenario; type: Cutoff["type"]; clock: number; onInspect: (cutoff: Cutoff) => void }) {
   const end = Date.parse(row.request.time_range.end_utc);
   const events = useMemo(() => row.site.events ?? sampledEvents(row.site.timeline), [row.site]);
   if (clock >= end) return <span>Window ended</span>;
@@ -35,32 +45,52 @@ function EventCountdown({ row, type, clock }: { row: Scenario; type: "sunset" | 
   const time = Date.parse(event.time_utc);
   const minutes = Math.max(0, Math.ceil((time - clock) / 60_000));
   const days = Math.floor(minutes / 1440), remaining = minutes % 1440;
-  return <span data-metric={row.site.events ? `${row.site.id}:${type}` : undefined} data-raw={row.site.events ? event.time_utc : undefined} title={`±${event.uncertainty_minutes} min`}>
+  return <div className="scenario-event-cell"><span data-metric={row.site.events ? `${row.site.id}:${type}` : undefined} data-raw={row.site.events ? event.time_utc : undefined} title={`±${event.uncertainty_minutes} min`}>
     {row.site.events ? "" : "About "}{utcTime(event.time_utc)}<small>{minutes === 0 ? "At selected time" : `In ${days ? `${days} d ` : ""}${Math.floor(remaining / 60)} h ${remaining % 60} min`}</small>
-  </span>;
+  </span><button className="text-button" type="button" onClick={() => onInspect({ ...event, type, refined: row.site.events != null })}>Inspect {type}</button></div>;
 }
 
-function Timeline({ rows, start, end, clock }: { rows: Scenario[]; start: number; end: number; clock: number }) {
+function Timeline({ rows, start, end, clock, onInspect }: {
+  rows: Scenario[]; start: number; end: number; clock: number;
+  onInspect: (row: Scenario, cutoff: Cutoff) => void;
+}) {
   const position = (time: number) => (time - start) * 100 / (end - start);
-  const ids = [...new Set(rows.map(row => row.site.id))];
   return <section className="scenario-timeline" aria-label="Aligned site timelines">
-    <p>{utcTime(new Date(start).toISOString())} to {utcTime(new Date(end).toISOString())} · Filled segments show visibility</p>
+    <p>{utcTime(new Date(start).toISOString())} to {utcTime(new Date(end).toISOString())} · Filled segments show visibility. Select a cutoff marker to inspect it.</p>
     {rows.map(row => <div className="scenario-strip-row" key={row.key}>
-      <strong><span className="scenario-dot" style={{ backgroundColor: SITE_COLORS[ids.indexOf(row.site.id)] }} />{label(row)} · {row.request.time_range.start_utc.slice(0, 10)}</strong>
+      <strong>{label(row)} <small>{row.request.time_range.start_utc.slice(0, 10)}</small></strong>
       {(["sun_visible", "earth_visible"] as const).map((key, index) => {
         const runs = visibilityRuns(row.site, row.request, key);
         const title = index ? "Earth in view" : "Sunlight";
-        return <div key={key} className="scenario-strip-line"><span>{title}</span><div className="scenario-strip" aria-hidden="true">
-          {runs.map(run => <span className={run.visible ? "visible" : "blocked"} key={run.start} style={{ left: `${position(run.start)}%`, width: `${position(run.end) - position(run.start)}%` }} />)}
-          {(row.site.events ?? sampledEvents(row.site.timeline)).filter(event => event.type === (index ? "earthset" : "sunset")).map(event => <span className="scenario-event" key={event.time_utc} style={{ left: `${position(Date.parse(event.time_utc))}%` }} title={utcTime(event.time_utc)} />)}
-          <span className="scenario-clock-mark" style={{ left: `${position(clock)}%` }} />
+        const type = index ? "earthset" : "sunset";
+        return <div key={key} className="scenario-strip-line"><span>{title}</span><div className="scenario-strip">
+          {runs.map(run => <span aria-hidden="true" className={run.visible ? "visible" : "blocked"} key={run.start} style={{ left: `${position(run.start)}%`, width: `${position(run.end) - position(run.start)}%` }} />)}
+          <span aria-hidden="true" className="scenario-clock-mark" style={{ left: `${position(clock)}%` }} />
+          {(row.site.events ?? sampledEvents(row.site.timeline)).filter(event => event.type === type).map(event => {
+            const tick = position(Date.parse(event.time_utc));
+            if (tick < 0 || tick > 100) return null;
+            return <button className="scenario-event" type="button" key={event.time_utc} style={{ left: `${tick}%` }}
+              title={`Inspect ${type} · ${utcTime(event.time_utc)}`}
+              aria-label={`Inspect ${label(row)} ${type} at ${utcTime(event.time_utc)}`}
+              onClick={() => onInspect(row, { ...event, type, refined: row.site.events != null })} />;
+          })}
         </div><span className="sr-only">{runs.filter(run => run.visible).map(run => `${utcTime(new Date(run.start).toISOString())} to ${utcTime(new Date(run.end).toISOString())}`).join("; ") || "No visible samples"}</span></div>;
       })}
     </div>)}
   </section>;
 }
 
-function Charts({ row }: { row: Scenario }) {
+function Charts({ row, synthetic, targetTime, cutoff }: { row: Scenario; synthetic: boolean; targetTime?: number; cutoff?: Cutoff }) {
+  const [inspectedTime, setInspectedTime] = useState<number>();
+  const [dataTables, setDataTables] = useState<string[]>([]);
+  const evidence = useRef<HTMLHeadingElement>(null);
+  const timeline = row.site.timeline;
+  const sampleIndex = Math.max(0, sampleIndexAt(timeline, inspectedTime ?? targetTime ?? Date.parse(row.request.time_range.start_utc)));
+  const sample = timeline[sampleIndex];
+  function inspectAt(time: number) {
+    setInspectedTime(time);
+    evidence.current?.focus();
+  }
   const [capacity, setCapacity] = useState("2000"), [load, setLoad] = useState("150");
   const [area, setArea] = useState<string>(), [efficiency, setEfficiency] = useState<string>();
   const start = Date.parse(row.request.time_range.start_utc), end = Date.parse(row.request.time_range.end_utc);
@@ -70,9 +100,11 @@ function Charts({ row }: { row: Scenario }) {
   const factor = power && panelArea > 0 && panelEfficiency > 0 && panelEfficiency <= 100 && power.assumptions.area_m2 > 0 && power.assumptions.efficiency > 0
     ? panelArea * panelEfficiency / (100 * power.assumptions.area_m2 * power.assumptions.efficiency) : undefined;
   const margin = Number(capacity) >= 0 && capacity !== "" && Number(load) > 0 ? batteryMargin(Number(capacity), Number(load), row.site.metrics.longest_darkness_hours) : null;
-  const elevations = row.site.timeline.map(sample => ({ time_utc: sample.time_utc, first: sample.sun_elevation_deg, second: sample.sun_horizon_deg }));
+  const elevations = timeline.map(point => ({ time_utc: point.time_utc, first: point.sun_elevation_deg, second: point.sun_horizon_deg }));
+  const earthElevations = timeline.map(point => ({ time_utc: point.time_utc, first: point.earth_elevation_deg, second: point.earth_horizon_deg }));
   const watts = factor == null ? [] : power?.series.map(sample => ({ time_utc: sample.time_utc, first: sample.vertical_w * factor, second: sample.horizontal_w * factor })) ?? [];
-  function plot(points: typeof elevations, title: string, first: string, second: string, unit: string) {
+  function plot(points: typeof elevations, title: string, first: string, second: string, unit: string,
+    rawKeys?: readonly [string, string]) {
     if (!points.length) return <p>{title} unavailable for this analysis.</p>;
     const bounds = points.reduce(({ min, max }, point) => ({
       min: Math.min(min, point.first, point.second), max: Math.max(max, point.first, point.second),
@@ -87,29 +119,109 @@ function Charts({ row }: { row: Scenario }) {
         {horizon && <polygon points={horizon} fill="#8bc8ed28" />}
         <polyline points={line("second")} stroke="#8bc8ed" strokeDasharray="5 4" />
         <polyline points={line("first")} stroke="#f6cc80" />
+        {sample && unit === "°" && <line x1={(Date.parse(sample.time_utc) - start) * 600 / (end - start)}
+          x2={(Date.parse(sample.time_utc) - start) * 600 / (end - start)} y1="0" y2="100" stroke="#e7f5ec" /> }
       </svg></div>
       <div className="scenario-chart-axis"><span>{utcTime(row.request.time_range.start_utc)}</span><span>{utcTime(row.request.time_range.end_utc)}</span></div>
-      <details><summary>Chart data table</summary><div className="table-scroll"><table className="comparison-table"><thead><tr><th scope="col">Time (UTC)</th><th scope="col">{first} ({unit})</th><th scope="col">{second} ({unit})</th></tr></thead>
-        <tbody>{points.map(point => <tr key={point.time_utc} data-time-utc={point.time_utc}><th scope="row">{utcTime(point.time_utc)}</th><td {...(unit === "°" ? metricAttributes(row.site.id, "sun_elevation_deg", point.first) : factor === 1 ? metricAttributes(row.site.id, "vertical_w", point.first) : {})}>{point.first.toFixed(2)}</td>
-        <td {...(unit === "°" ? metricAttributes(row.site.id, "sun_horizon_deg", point.second) : factor === 1 ? metricAttributes(row.site.id, "horizontal_w", point.second) : {})}>{point.second.toFixed(2)}</td></tr>)}</tbody></table></div></details>
+      <details onToggle={event => {
+        const open = event.currentTarget.open;
+        setDataTables(current => open ? Array.from(new Set([...current, title])) : current.filter(name => name !== title));
+      }}><summary>{title} data table</summary>{dataTables.includes(title) && <div className="table-scroll"><table className="comparison-table"><thead><tr><th scope="col">Time (UTC)</th><th scope="col">{first} ({unit})</th><th scope="col">{second} ({unit})</th></tr></thead>
+        <tbody>{points.map(point => <tr key={point.time_utc} data-time-utc={point.time_utc}><th scope="row">{utcTime(point.time_utc)}</th><td {...(rawKeys ? metricAttributes(row.site.id, rawKeys[0], point.first) : {})}>{point.first.toFixed(2)}</td>
+        <td {...(rawKeys ? metricAttributes(row.site.id, rawKeys[1], point.second) : {})}>{point.second.toFixed(2)}</td></tr>)}</tbody></table></div>}</details>
     </figure>;
   }
   return <section className="scenario-charts" aria-label={`${label(row)} charts`}>
-    {plot(elevations, "Solar elevation", "Sun elevation", "Terrain horizon", "°")}
+    {cutoff && <CutoffTerrainEvidence site={row.site} type={cutoff.type} timeUtc={cutoff.time_utc}
+      uncertaintyMinutes={cutoff.uncertainty_minutes} refined={cutoff.refined} onInspectSample={inspectAt} />}
+    {plot(elevations, "Solar elevation", "Sun elevation", "Terrain horizon", "°", ["sun_elevation_deg", "sun_horizon_deg"])}
+    {plot(earthElevations, "Earth elevation", "Earth center elevation", "Terrain horizon", "°", ["earth_elevation_deg", "earth_horizon_deg"])}
+    {sample && <section className="horizon-sample">
+      <h4 ref={evidence} tabIndex={-1}>Inspect the terrain horizon</h4>
+      <label className="field">Horizon sample · {utcTime(sample.time_utc)}<input type="range" min="0" max={timeline.length - 1}
+        value={sampleIndex} disabled={timeline.length < 2} aria-valuetext={utcTime(sample.time_utc)}
+        onChange={event => setInspectedTime(Date.parse(timeline[Number(event.target.value)].time_utc))} /></label>
+      <dl className="inspection-facts">
+        <div><dt>Earth center · {sample.earth_visible ? "In view" : "Blocked"}</dt><dd>{sample.earth_elevation_deg.toFixed(3)}° elevation · {sample.earth_horizon_deg.toFixed(3)}° terrain horizon · {(sample.earth_elevation_deg - sample.earth_horizon_deg).toFixed(3)}° clearance</dd></div>
+        <div><dt>Sun’s upper edge · {sample.sun_visible ? "Visible" : "Blocked"}</dt><dd>{sample.sun_elevation_deg.toFixed(3)}° center elevation · {sample.sun_horizon_deg.toFixed(3)}° terrain horizon · {percent(sample.solar_fraction)} of the Sun’s disk visible</dd></div>
+      </dl>
+      <p>Values are for the selected timeline sample. Refined transitions can fall between samples.</p>
+    </section>}
+    {!synthetic && <HorizonReview timeline={row.site.timeline} onInspect={time => inspectAt(Date.parse(time))} />}
     {power && <div className="guide-fields"><label className="field">Panel area (m²)<input type="number" min=".01" step=".01" value={area ?? power.assumptions.area_m2} onChange={event => setArea(event.target.value)} /></label><label className="field">Efficiency (%)<input type="number" min="1" max="100" value={efficiency ?? power.assumptions.efficiency * 100} onChange={event => setEfficiency(event.target.value)} /></label></div>}
-    {plot(watts, "Solar power estimate", "Vertical tracking", "Horizontal", "W")}
+    {plot(watts, "Solar power estimate", "Vertical tracking", "Horizontal", "W", factor === 1 ? ["vertical_w", "horizontal_w"] : undefined)}
     {power && factor != null && <p>Window energy estimate: {metrics[3].format(power.energy_wh * factor)} vertical tracking · {metrics[3].format(power.horizontal_energy_wh * factor)} horizontal.</p>}
+    {power?.powered_contact ? <p>For the full battery model, see Powered contact windows. To change the load or battery and recompute, open Compare launch slips.</p> : <>
     <div className="guide-fields"><label className="field">Usable battery capacity (Wh)<input type="number" min="0" value={capacity} onChange={event => setCapacity(event.target.value)} /></label><label className="field">Constant load (W)<input type="number" min="1" value={load} onChange={event => setLoad(event.target.value)} /></label></div>
-    <p aria-live="polite">{margin == null ? "Enter usable battery capacity and a positive load." : `Survives the longest night: ${margin >= 0 ? "yes" : "no"} · ${hours(Math.abs(margin))} ${margin >= 0 ? "of reserve" : "short"} at this load.`}</p>
+    <p aria-live="polite">{margin == null ? "Enter usable battery capacity and a positive load." : `Rough reserve check for the longest night: ${margin >= 0 ? "yes" : "no"} · ${hours(Math.abs(margin))} ${margin >= 0 ? "of reserve" : "short"} at this load.`}</p></>}
   </section>;
 }
 
-export function ScenarioBoard({ result, audience, onInspect, onSummarySelection, initialRows, terrain }: {
+const boardViews = ["Overview", "Timeline", "Analysis"] as const;
+type BoardView = typeof boardViews[number];
+const overviewMetrics = [metrics[1], metrics[0], metrics[2], metrics[3]];
+
+function ComparisonValues({ rows, options, onReplace }: {
+  rows: Scenario[]; options: Scenario[]; onReplace: (previous: string, next: string) => void;
+}) {
+  const timeRange = rows[0].request.time_range;
+  const commonWindow = rows.every(({ request }) =>
+    request.time_range.start_utc === timeRange.start_utc && request.time_range.end_utc === timeRange.end_utc);
+  const adjustable = options.length > rows.length;
+  const byContact = [...rows].sort((a, b) => b.site.metrics.longest_communication_hours - a.site.metrics.longest_communication_hours);
+  const continuousDifference = commonWindow && byContact.length === 2
+    ? byContact[0].site.metrics.longest_communication_hours - byContact[1].site.metrics.longest_communication_hours : 0;
+  return <section className="scenario-comparison" aria-label="Compare selected scenarios">
+    {commonWindow && <p className="compare-window">{utcRange(timeRange)}</p>}
+    <div className="compare-values-scroll" role="region" aria-label="Comparison values" tabIndex={rows.length > 2 ? 0 : undefined}>
+      <table className="comparison-table compare-values" data-sites={rows.length}>
+        <thead><tr>
+          <th scope="col"><span className="sr-only">Metric</span></th>
+          {rows.map((row, index) => <th scope="col" key={index}>
+            {adjustable ? <>
+              <select className="compare-site-picker" aria-label={`Site in column ${index + 1}`} value={row.key}
+                onChange={event => onReplace(row.key, event.target.value)}>
+                {options.map(option => <option key={option.key} value={option.key}
+                  disabled={option.key !== row.key && rows.some(selected => selected.key === option.key)}>
+                  {label(option)}{options.filter(other => label(other) === label(option)).length > 1 ? ` · ${utcRange(option.request.time_range)}` : ""}
+                </option>)}
+              </select>
+              <span className="compare-site-print">{label(row)}</span>
+            </> : label(row)}
+            {!commonWindow && <small>{utcRange(row.request.time_range)}</small>}
+          </th>)}
+        </tr></thead>
+        <tbody>{overviewMetrics.map(metric => {
+          const numbers = rows.map(row => value(row, metric.key)).filter((number): number is number => number != null);
+          const best = (metric.higher ? Math.max : Math.min)(...numbers);
+          const differs = new Set(numbers.map(metric.format)).size > 1;
+          return <tr key={metric.key}>
+            <th scope="row">{metric.label}</th>
+            {rows.map(row => {
+              const number = value(row, metric.key);
+              const leads = number != null && differs && metric.format(number) === metric.format(best);
+              return <td key={row.key} className={leads ? "compare-leading" : undefined}><Metric row={row} metric={metric} /></td>;
+            })}
+          </tr>;
+        })}</tbody>
+      </table>
+    </div>
+    {continuousDifference >= 0.05 && <p className="compare-finding">{label(byContact[0])} has <strong>{hours(continuousDifference)} more</strong> uninterrupted Earth visibility than {label(byContact[1])}.</p>}
+  </section>;
+}
+
+export function ScenarioBoard({ result, audience, onInspect, onSummarySelection, initialRows, selectInitialRows = false, terrain }: {
   result?: ScenarioResult; audience: Audience; onInspect?: (id: string) => void;
-  onSummarySelection?: (sites: Candidate[]) => void; initialRows?: Scenario[]; terrain?: TerrainData | null;
+  onSummarySelection?: (sites: Candidate[]) => void; initialRows?: Scenario[]; selectInitialRows?: boolean; terrain?: TerrainData | null;
 }) {
   const [rows, setRows] = useState<Scenario[]>(() => initialRows ?? result?.candidates.slice(0, 4).map(site => ({ site, request: result.request, key: scenarioKey(site.id, result.request) })) ?? []);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(() => rows.slice(0, selectInitialRows ? COMPARE_LIMIT : 2).map(row => row.key));
+  const [view, setView] = useState<BoardView>("Overview");
+  const [analysisVisited, setAnalysisVisited] = useState(false);
+  const boardId = useId();
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+  const shareMenu = useRef<HTMLDetailsElement>(null);
+  const shareField = useRef<HTMLInputElement>(null);
   const [sort, setSort] = useState<Key | "start">("start");
   const [sharing, setSharing] = useState(false);
   const [addSite, setAddSite] = useState("");
@@ -119,10 +231,35 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [map, setMap] = useState(false);
-  const [chart, setChart] = useState("");
+  const [terrainOpen, setTerrainOpen] = useState(false);
+  const [terrainView, setTerrainView] = useState<"map" | "terrain">("terrain");
+  const [openChart, setOpenChart] = useState<{ key: string; time?: number; revision: number; cutoff?: Cutoff }>();
+  const [launch, setLaunch] = useState<{ key: string }>();
+  const [poweredMinimumHours, setPoweredMinimumHours] = useState("12");
+  const launchKey = launch?.key;
+  const launchRow = rows.find(row => row.key === launchKey);
+  const chartSection = useRef<HTMLDivElement>(null);
+  const launchSection = useRef<HTMLDivElement>(null);
+  const chart = openChart?.key;
+  useEffect(() => {
+    if (openChart) chartSection.current?.focus();
+  }, [openChart]);
+  useEffect(() => {
+    if (launch) launchSection.current?.focus();
+  }, [launch]);
+  useEffect(() => {
+    if (sharing) {
+      shareField.current?.focus();
+      shareField.current?.select();
+    }
+  }, [sharing]);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
-  const picked = selected.flatMap(key => rows.find(row => row.key === key) ?? []);
+  const picked = useMemo(() => selected.flatMap(key => rows.find(row => row.key === key) ?? []), [rows, selected]);
+  const summarySites = useMemo(() => result ? picked
+    .filter(row => result.candidates.some(site => row.key === scenarioKey(site.id, result.request)))
+    .map(row => row.site) : [], [picked, result]);
+  useEffect(() => onSummarySelection?.(summarySites), [onSummarySelection, summarySites]);
   const axis = picked.length ? picked : rows;
   const start = axis.length ? Math.min(...axis.map(row => Date.parse(row.request.time_range.start_utc))) : Date.parse(result?.common_window.start_utc ?? "");
   const end = axis.length ? Math.max(...axis.map(row => Date.parse(row.request.time_range.end_utc))) : Date.parse(result?.common_window.end_utc ?? "");
@@ -137,17 +274,25 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
     return (first - second) * direction;
   });
   const chartRow = rows.find(row => row.key === chart);
+  function show(view: BoardView) {
+    setView(view);
+    if (view === "Analysis") setAnalysisVisited(true);
+  }
+  function openEvidence(row: Scenario, time?: number, cutoff?: Cutoff) {
+    setLaunch(undefined);
+    setOpenChart(current => ({ key: row.key, cutoff, time, revision: (current?.revision ?? 0) + 1 }));
+    show("Analysis");
+  }
+  function inspectCutoff(row: Scenario, cutoff: Cutoff) {
+    openEvidence(row, Date.parse(cutoff.time_utc), cutoff);
+  }
   const mapSites = [...new Map(picked.map(row => [row.site.id, row.site])).values()];
   const alternatives = [...new Map([...(result?.alternatives ?? []), ...rows.flatMap(row => row.alternatives ?? [])]
     .map(option => [option.suggestion_id ?? `${option.kind}:${option.id}:${JSON.stringify(option.request)}`, option])).values()];
-  const activeSites = [...new Map(picked.filter(row => clock >= Date.parse(row.request.time_range.start_utc)
-    && clock <= Date.parse(row.request.time_range.end_utc)).map(row => [row.site.id, row.site])).values()];
-  const sceneSample = activeSites[0]?.timeline[sampleIndexAt(activeSites[0].timeline, new Date(clock).toISOString())];
-  function selectRows(keys: string[]) {
-    setSelected(keys);
-    onSummarySelection?.(rows.filter(row => keys.includes(row.key) && result &&
-      result.candidates.some(site => row.key === scenarioKey(site.id, result.request))).map(row => row.site));
-  }
+  const activeRowsBySite = new Map(picked.filter(row => clock >= Date.parse(row.request.time_range.start_utc)
+    && clock <= Date.parse(row.request.time_range.end_utc)).map(row => [row.site.id, row]));
+  const activeSites = Array.from(activeRowsBySite.values(), row => row.site);
+  const sceneSample = activeSites[0]?.timeline[Math.max(0, sampleIndexAt(activeSites[0].timeline, clock))];
   async function add(id: string, request: Scenario["request"], name?: string) {
     if (controller.current || rows.length >= MAX_SCENARIOS) return;
     setError("");
@@ -181,75 +326,237 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
       next_sunset_utc: nextEvent(row.site, "sunset", Math.max(clock, Date.parse(row.request.time_range.start_utc)))?.time_utc,
       next_earthset_utc: nextEvent(row.site, "earthset", Math.max(clock, Date.parse(row.request.time_range.start_utc)))?.time_utc })), "lumen-scenarios.csv");
   }
-  return <section className="scenario-board" aria-labelledby="scenario-board-title">
-    <div className="section-heading"><div><h2 id="scenario-board-title">Scenario board</h2><p>Compare up to four site and date combinations at a time.</p></div>
-      {!!rows.length && <div className="scenario-tools"><button className="secondary-button" aria-expanded={sharing} onClick={() => setSharing(current => !current)}>Share board</button><button className="secondary-button" onClick={exportCsv}>Export CSV</button><button className="secondary-button" onClick={() => window.print()}>Print / Save PDF</button></div>}</div>
-    {shareLink && <label className="field">Share link<input readOnly value={shareLink} onFocus={event => event.currentTarget.select()} /></label>}
-    {result && result.candidates.some(site => !rows.some(row => row.key === scenarioKey(site.id, result.request))) && <form className="scenario-tools" onSubmit={event => {
-      event.preventDefault();
-      const site = result.candidates.find(candidate => candidate.id === addSite);
-      if (!site || rows.length >= MAX_SCENARIOS || busy || rows.some(row => row.key === scenarioKey(site.id, result.request))) return;
-      setRows(current => [...current, { key: scenarioKey(site.id, result.request), site, request: result.request }]);
-      setAddSite("");
-    }}>
-      <label className="field">Add candidate<select required value={addSite} onChange={event => setAddSite(event.target.value)}>
-        <option value="">Choose a candidate</option>{result.candidates.filter(site => !rows.some(row => row.key === scenarioKey(site.id, result.request))).map(site => <option value={site.id} key={site.id}>Candidate {site.rank}</option>)}
-      </select></label><button className="secondary-button" disabled={!addSite || busy || rows.length >= MAX_SCENARIOS}>Add to board</button>
-    </form>}
-    {rows.length > 0 && <>
-      <div className="scenario-tools"><label className="field">Sort by<select value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="start">Start date</option>{metrics.map(metric => <option key={metric.key} value={metric.key}>{metric.label}</option>)}</select></label>
-        <label className="field scenario-clock">Compare time · {utcTime(new Date(clock).toISOString())}<input type="range" min={0} max={maxOffset} value={Math.min(offset, maxOffset)} aria-valuetext={utcTime(new Date(clock).toISOString())} onChange={event => setOffset(Number(event.target.value))} /></label></div>
-      <p className="field-hint">Countdowns use the compare clock. Times marked “About” are midpoints between available samples.</p>
-      <div className="table-scroll" role="region" aria-label="Scenario rows" tabIndex={0}><table className="comparison-table scenario-table" role="table"><thead role="rowgroup"><tr role="row">
-        {[
-          ["Compare", ""], ["Site and dates", ""], ["Next sunset", "The next time the Sun drops behind terrain after the compare clock."],
-          ["Next Earthset", "The next time Earth's center drops behind terrain after the compare clock."],
-          ...metrics.map(metric => [metric.label, metric.meaning]), ["Actions", ""],
-        ].map(([col, meaning]) => <th key={col} scope="col" role="columnheader">{col}{meaning && <details><summary aria-label={`Explain ${col}`}>ⓘ</summary>{meaning}</details>}</th>)}
-      </tr></thead><tbody role="rowgroup">{sorted.map(row => {
-        const checked = selected.includes(row.key);
-        return <tr key={row.key} data-scenario-start={row.request.time_range.start_utc} role="row"><td role="cell"><input type="checkbox" checked={checked} disabled={!checked && selected.length >= COMPARE_LIMIT} aria-label={`Compare ${label(row)} starting ${row.request.time_range.start_utc}`} onChange={() => selectRows(checked ? selected.filter(key => key !== row.key) : [...selected, row.key])} /></td>
-          <th scope="row" role="rowheader">{label(row)}<small>{utcTime(row.request.time_range.start_utc)} → {utcTime(row.request.time_range.end_utc)}</small>{row.constraint_status?.passes === false && <small className="guide-error">Fails mission limits · see Try instead</small>}</th>
-          <td role="cell" data-label="Next sunset"><EventCountdown row={row} type="sunset" clock={Math.max(clock, Date.parse(row.request.time_range.start_utc))} /></td><td role="cell" data-label="Next Earthset"><EventCountdown row={row} type="earthset" clock={Math.max(clock, Date.parse(row.request.time_range.start_utc))} /></td>
-          {metrics.map(metric => <td role="cell" key={metric.key} data-label={metric.label}><Metric row={row} metric={metric} /></td>)}
-          <td role="cell"><div className="scenario-row-actions"><button className="text-button" aria-pressed={chart === row.key} onClick={() => setChart(current => current === row.key ? "" : row.key)}>Charts</button>
-            {onInspect && row.site.rank > 0 && result?.candidates.some(site => site.id === row.site.id && row.key === scenarioKey(site.id, result.request)) && <button className="text-button" onClick={() => onInspect(row.site.id)}>Inspect</button>}
-            <button className="text-button" disabled={busy || rows.length >= MAX_SCENARIOS} onClick={() => { setEditing(row); setStartDate(row.request.time_range.start_utc.slice(0, 16)); }}>Duplicate &amp; change date</button>
-            <button className="text-button" onClick={() => { setRows(current => current.filter(item => item.key !== row.key)); selectRows(selected.filter(key => key !== row.key)); }}>Remove</button></div></td></tr>;
-      })}</tbody></table></div>
-      {audience === "Educator" && <p>Try duplicating a site and moving its start date. What changes in the sunlight and Earth-view strips?</p>}
-      {audience !== "Planner" && <ul className="scenario-verdicts">{(picked.length ? picked : rows.slice(0, 3)).map(row => <li key={row.key}><strong>{label(row)}.</strong> {scenarioVerdict(row.site.metrics)}</li>)}</ul>}
-    </>}
-    {editing && <form className="scenario-tools" onSubmit={event => { event.preventDefault(); void add(editing.site.id, scenarioWindow(editing.request, `${startDate}Z`), label(editing)); }}>
-      <label className="field">New start date for {label(editing)} (UTC)<input required type="datetime-local" value={startDate} onChange={event => setStartDate(event.target.value)} /></label>
-      <button className="primary-button" disabled={busy || rows.length >= MAX_SCENARIOS}>Analyze the new date</button><button type="button" className="secondary-button" onClick={() => setEditing(null)}>Cancel</button>
-    </form>}
-    {busy && <p role="status">Analyzing scenario…</p>}{error && <p role="alert" className="guide-error">{error}</p>}
-    {picked.length > 1 && <section className="scenario-comparison" aria-label="Compare selected scenarios">
-      <h3>Compare selected scenarios</h3>
-      <Timeline rows={picked} start={start} end={end} clock={clock} />
-      {terrain && <div className="scenario-terrain"><h4>Shared terrain at the compare clock</h4>
-        <p>{utcTime(new Date(clock).toISOString())} · Only scenarios covering this time are shown. Pin colours match the comparison.</p>
-        {sceneSample ? <Suspense fallback={<p role="status">Loading shared terrain…</p>}><TerrainScene
-          terrain={terrain} candidates={activeSites} selected={activeSites[0].id} onSelect={id => setChart(picked.find(row => row.site.id === id)?.key ?? "")}
-          compare={mapSites.map(site => site.id)} sample={sceneSample} mode="terrain" layer="terrain"
-          mapCandidates={result?.map_candidates ?? []} psr={null} features={[]} /></Suspense>
-          : <p>No selected scenario covers this clock time.</p>}
-        <div className="scenario-tools">{mapSites.map((site, index) => <span key={site.id}><span className="scenario-dot" style={{ backgroundColor: COMPARE_COLORS[index] }} />{coordinate(site.latitude_deg, site.longitude_deg_east)}</span>)}</div>
-      </div>}
-      <div className="table-scroll" role="region" aria-label="Comparison values" tabIndex={0}><table className="comparison-table"><thead><tr><th scope="col">Indicator</th>{picked.map(row => <th scope="col" key={row.key}><span className="scenario-dot" style={{ backgroundColor: SITE_COLORS[mapSites.findIndex(site => site.id === row.site.id)] }} />{label(row)}<small>{row.request.time_range.start_utc.slice(0, 10)}</small></th>)}</tr></thead>
-        <tbody>{metrics.map(metric => {
-          const values = picked.flatMap(row => value(row, metric.key) ?? []);
-          const best = (metric.higher ? Math.max : Math.min)(...values);
-          return <tr key={metric.key}><th scope="row">{metric.label}<details><summary aria-label={`Explain ${metric.label}`}>ⓘ</summary>{metric.meaning}</details></th>
-            {picked.map(row => <td key={row.key}><Metric row={row} metric={metric} />{values.length > 1 && value(row, metric.key) != null && (value(row, metric.key) === best
-              ? <small className="scenario-best">Best in comparison</small>
-              : <small>{metric.key.endsWith("_fraction") ? `${(Math.abs(best - value(row, metric.key)!) * 100).toFixed(1)} percentage points` : metric.format(Math.abs(best - value(row, metric.key)!))} from best</small>)}</td>)}</tr>;
-        })}</tbody></table></div>
-      {mapSites.length > 1 && <button className="secondary-button" aria-expanded={map} onClick={() => setMap(current => !current)}>{map ? "Hide selected locations" : "Locate selected sites on the Moon"}</button>}
-      {map && mapSites.length > 1 && <div className="scenario-map"><Suspense fallback={<p role="status">Loading Moon…</p>}><GlobeScene sites={mapSites} selectedCenter={mapSites[0]} timeRange={{ start_utc: new Date(start).toISOString(), end_utc: new Date(end).toISOString() }} preparedLabel="Selected scenario locations" /></Suspense></div>}
-    </section>}
-    {chartRow && <div className="scenario-chart-section"><h3>{label(chartRow)} · {utcTime(chartRow.request.time_range.start_utc)}</h3><Charts key={chartRow.key} row={chartRow} /></div>}
+
+  const available = result?.candidates.filter(site => !rows.some(row => row.key === scenarioKey(site.id, result.request))) ?? [];
+  const canAdd = !busy && rows.length < MAX_SCENARIOS;
+  const ids = (name: BoardView) => ({ tab: `${boardId}-tab-${name}`, panel: `${boardId}-panel-${name}` });
+  const synthetic = import.meta.env.VITE_LUMEN_MOCK === "1" || result?.provenance.synthetic === true;
+  function closeActions() {
+    if (!shareMenu.current) return;
+    shareMenu.current.open = false;
+    shareMenu.current.querySelector("summary")?.focus();
+  }
+  return <section className="scenario-board" aria-labelledby="scenario-board-title" onKeyDown={event => {
+    if (event.key !== "Escape" || !(event.target instanceof Element)) return;
+    const menu = event.target.closest<HTMLDetailsElement>(".compare-actions[open], .compare-row-menu[open]");
+    if (!menu) return;
+    menu.open = false;
+    menu.querySelector("summary")?.focus();
+  }}>
+    <h2 id="scenario-board-title" className="sr-only">Scenario board</h2>
+    <div className="compare-toolbar">
+      <div className="compare-tabs" role="tablist" aria-label="Comparison views">
+        {boardViews.map((name, index) => <button key={name} type="button" role="tab"
+          id={ids(name).tab} aria-controls={ids(name).panel} aria-selected={view === name} tabIndex={view === name ? 0 : -1}
+          disabled={!rows.length && name !== "Overview"} ref={node => { tabs.current[index] = node; }}
+          onKeyDown={event => {
+            if (!rows.length) return;
+            let next: number;
+            if (event.key === "Home") next = 0;
+            else if (event.key === "End") next = boardViews.length - 1;
+            else if (event.key === "ArrowRight") next = (index + 1) % boardViews.length;
+            else if (event.key === "ArrowLeft") next = (index + boardViews.length - 1) % boardViews.length;
+            else return;
+            event.preventDefault();
+            show(boardViews[next]);
+            tabs.current[next]?.focus();
+          }}
+          onClick={() => show(name)}>{name}</button>)}
+      </div>
+      {rows.length > 0 && <details ref={shareMenu} className="compare-actions">
+        <summary aria-label="Share and export"><Icon name="download" size={16} /><span className="compare-action-label">Share</span></summary>
+        <div className="compare-menu">
+          <button onClick={() => { closeActions(); setSharing(true); }}>Share link</button>
+          <button onClick={() => { closeActions(); exportCsv(); }}>Export CSV</button>
+          <button disabled={!picked.length} onClick={() => { closeActions(); window.print(); }}>Print / Save PDF</button>
+        </div>
+      </details>}
+    </div>
+
+    {shareLink && <div className="compare-share">
+      <label className="field">Share link<input ref={shareField} readOnly value={shareLink} onFocus={event => event.currentTarget.select()} /></label>
+      <button className="text-button" onClick={() => { setSharing(false); shareMenu.current?.querySelector("summary")?.focus(); }}>Done</button>
+    </div>}
+
+    <div className="scenario-overview" role="tabpanel" id={ids("Overview").panel} aria-labelledby={ids("Overview").tab} hidden={view !== "Overview"}>
+      {picked.length > 0 && <ComparisonValues rows={picked} options={rows}
+        onReplace={(previous, next) => setSelected(current =>
+          current.includes(next) ? current : current.map(key => key === previous ? next : key))} />}
+      {picked.length > 0 && <SolarGeneration rows={picked} name={label} start={start} end={end} />}
+      {picked.length < 2 && rows.length > 1 && <p className="compare-selection-hint">Select two or more scenarios to compare them.</p>}
+      {!rows.length && !available.length && !alternatives.length && <p>No scenarios to compare.</p>}
+      {(rows.length > 0 || available.length > 0) && <details className="compare-management">
+        <summary>Edit scenarios</summary>
+        <section className="compare-scenarios" aria-label="Scenarios">
+        <header className="compare-section-heading">
+          <div><h3>Scenarios</h3><p aria-live="polite">{picked.length} selected · Compare up to {COMPARE_LIMIT}</p></div>
+          {rows.length > 2 && <label className="field compare-sort">Sort by<select value={sort} onChange={event => setSort(event.target.value as typeof sort)}>
+            <option value="start">Start date</option>{metrics.map(metric => <option key={metric.key} value={metric.key}>{metric.label}</option>)}
+          </select></label>}
+        </header>
+        <ul className="compare-scenario-list">
+          {sorted.map(row => {
+            const checked = selected.includes(row.key);
+            const candidate = result?.candidates.some(site => site.id === row.site.id && row.key === scenarioKey(site.id, result.request));
+            return <li key={row.key} data-scenario-start={row.request.time_range.start_utc}>
+              <label className="compare-scenario-choice">
+                <input type="checkbox" checked={checked} disabled={!checked && selected.length >= COMPARE_LIMIT}
+                  aria-label={`Compare ${label(row)} starting ${row.request.time_range.start_utc}`}
+                  onChange={() => setSelected(current => checked ? current.filter(key => key !== row.key) : [...current, row.key])} />
+                <span><strong>{label(row)}</strong><small>{utcRange(row.request.time_range)}</small>
+                  {row.constraint_status?.passes === false && <small className="compare-limit-status">Falls short of mission limits</small>}
+                </span>
+              </label>
+              <details className="compare-row-menu">
+                <summary aria-label={`Actions for ${label(row)} starting ${row.request.time_range.start_utc}`}><span aria-hidden="true">•••</span></summary>
+                <div className="compare-menu" onClick={event => {
+                  if ((event.target as HTMLElement).closest("button")) {
+                    const disclosure = event.currentTarget.parentElement as HTMLDetailsElement;
+                    disclosure.open = false;
+                    disclosure.querySelector("summary")?.focus();
+                  }
+                }}>
+                  {onInspect && row.site.rank > 0 && candidate && <button onClick={() => onInspect(row.site.id)}>Inspect site</button>}
+                  <button onClick={() => openEvidence(row)}>Charts and evidence</button>
+                  <button onClick={() => { setOpenChart(undefined); setLaunch({ key: row.key }); show("Analysis"); }}>Compare launch slips</button>
+                  <button disabled={!canAdd} onClick={() => { setEditing(row); setStartDate(row.request.time_range.start_utc.slice(0, 16)); }}>Duplicate &amp; change date</button>
+                  <button onClick={event => {
+                    event.stopPropagation();
+                    const item = event.currentTarget.closest("li");
+                    const neighbor = item?.nextElementSibling ?? item?.previousElementSibling;
+                    const nextFocus = neighbor?.querySelector<HTMLInputElement>("input:not(:disabled)") ?? tabs.current[0];
+                    nextFocus?.focus();
+                    setRows(current => current.filter(item => item.key !== row.key));
+                    setSelected(current => current.filter(key => key !== row.key));
+                    if (editing?.key === row.key) setEditing(null);
+                    if (launchKey === row.key) setLaunch(undefined);
+                    if (chart === row.key) setOpenChart(undefined);
+                  }}>Remove from board</button>
+                </div>
+              </details>
+            </li>;
+          })}
+        </ul>
+        {result && available.length > 0 && <form className="scenario-tools compare-add" onSubmit={event => {
+          event.preventDefault();
+          const site = available.find(candidate => candidate.id === addSite);
+          if (!site || !canAdd) return;
+          setRows(current => [...current, { key: scenarioKey(site.id, result.request), site, request: result.request }]);
+          setAddSite("");
+        }}>
+          <label className="field">Candidate<select required value={addSite} onChange={event => setAddSite(event.target.value)}>
+            <option value="">Choose a candidate</option>{available.map(site => <option value={site.id} key={site.id}>Candidate {site.rank}</option>)}
+          </select></label>
+          <button className="secondary-button" disabled={!addSite || !canAdd}>Add to board</button>
+        </form>}
+        {editing && <form className="scenario-tools compare-add" onSubmit={event => { event.preventDefault(); void add(editing.site.id, scenarioWindow(editing.request, `${startDate}Z`), label(editing)); }}>
+          <label className="field">New start date for {label(editing)} (UTC)<input autoFocus required type="datetime-local" value={startDate} onChange={event => setStartDate(event.target.value)} /></label>
+          <button className="primary-button" disabled={!canAdd}>Analyze the new date</button>
+          <button type="button" className="text-button" onClick={() => setEditing(null)}>Cancel</button>
+        </form>}
+        </section>
+      </details>}
+    </div>
+
+    <div className="compare-timeline-panel" role="tabpanel" id={ids("Timeline").panel} aria-labelledby={ids("Timeline").tab} hidden={view !== "Timeline"}>
+      {view === "Timeline" && rows.length > 0 && <>
+        <header className="compare-section-heading"><h3>Sunlight and Earth visibility</h3></header>
+        <label className="field scenario-clock glass-surface">Compare time <time dateTime={new Date(clock).toISOString()}>{utcTime(new Date(clock).toISOString())}</time>
+          <input type="range" aria-label="Compare time" min={0} max={maxOffset} value={Math.min(offset, maxOffset)} aria-valuetext={utcTime(new Date(clock).toISOString())} onChange={event => setOffset(Number(event.target.value))} />
+        </label>
+        <Timeline rows={axis} start={start} end={end} clock={clock} onInspect={inspectCutoff} />
+        <details className="compare-disclosure">
+          <summary>Upcoming cutoffs</summary>
+          <p className="field-hint">Countdowns follow the compare clock. Times marked “About” are estimated from samples.</p>
+          <div className="compare-values-scroll" role="region" aria-label="Upcoming cutoffs" tabIndex={0}>
+            <table className="comparison-table compare-values compare-cutoffs"><thead><tr><th scope="col">Scenario</th><th scope="col">Next sunset</th><th scope="col">Next Earthset</th></tr></thead>
+              <tbody>{axis.map(row => <tr key={row.key} data-scenario-start={row.request.time_range.start_utc}>
+                <th scope="row">{label(row)} <small>{row.request.time_range.start_utc.slice(0, 10)}</small></th>
+                {(["sunset", "earthset"] as const).map(type => <td key={type}>
+                  <EventCountdown row={row} type={type} clock={Math.max(clock, Date.parse(row.request.time_range.start_utc))} onInspect={cutoff => inspectCutoff(row, cutoff)} />
+                </td>)}
+              </tr>)}</tbody>
+            </table>
+          </div>
+        </details>
+        {terrain && mapSites.length > 0 && <details className="compare-disclosure" open={terrainOpen} onToggle={event => setTerrainOpen(event.currentTarget.open)}>
+          <summary>Shared terrain at the compare clock</summary>
+          {terrainOpen && <div className="scenario-terrain">
+            <label className="field compare-terrain-view">Terrain view
+              <select value={terrainView} onChange={event => setTerrainView(event.target.value === "map" ? "map" : "terrain")}>
+                <option value="terrain">3D terrain</option>
+                <option value="map">2D map</option>
+              </select>
+            </label>
+            {sceneSample ? <Suspense fallback={<p role="status">Loading shared terrain…</p>}><TerrainScene terrain={terrain} candidates={activeSites}
+              selected={activeSites[0].id} onSelect={id => {
+                const row = activeRowsBySite.get(id);
+                if (row) openEvidence(row, clock);
+              }} compare={mapSites.map(site => site.id)} sample={sceneSample} mode={terrainView} layer="terrain"
+              mapCandidates={result?.map_candidates ?? []} psr={null} features={[]} /></Suspense>
+              : <p>No selected scenario covers this clock time.</p>}
+            <div className="scenario-tools">{mapSites.map((site, index) => <span key={site.id}>
+              <span className="scenario-dot" style={{ backgroundColor: COMPARE_COLORS[index] }} />{coordinate(site.latitude_deg, site.longitude_deg_east)}
+            </span>)}</div>
+          </div>}
+        </details>}
+        {mapSites.length > 1 && <details className="compare-disclosure" open={map} onToggle={event => setMap(event.currentTarget.open)}>
+          <summary>Locate selected sites on the Moon</summary>
+          {map && <div className="scenario-map"><Suspense fallback={<p role="status">Loading Moon…</p>}><GlobeScene sites={mapSites}
+            selectedCenter={mapSites[0]} timeRange={{ start_utc: new Date(start).toISOString(), end_utc: new Date(end).toISOString() }}
+            preparedLabel="Selected scenario locations" /></Suspense></div>}
+        </details>}
+      </>}
+    </div>
+
+    <div className="compare-analysis-panel" role="tabpanel" id={ids("Analysis").panel} aria-labelledby={ids("Analysis").tab} hidden={view !== "Analysis"}>
+      {analysisVisited && <>
+        {chartRow && <div className="scenario-chart-section" tabIndex={-1} ref={chartSection}>
+          <header className="compare-section-heading"><h3>{label(chartRow)} · {utcTime(chartRow.request.time_range.start_utc)}</h3>
+            <button className="text-button" onClick={() => { setOpenChart(undefined); tabs.current[2]?.focus(); }}>Close evidence</button>
+          </header>
+          <Charts key={`${chartRow.key}:${openChart?.revision}`} row={chartRow} targetTime={openChart?.time} cutoff={openChart?.cutoff}
+            synthetic={synthetic || chartRow.site.id.startsWith("fixture-")} />
+        </div>}
+        {launchRow && <div className="compare-launch-section" ref={launchSection} tabIndex={-1}>
+          <LaunchSlipComparison key={launchRow.key} baseline={launchRow} name={label(launchRow)} board={rows}
+            minimum={poweredMinimumHours} onMinimumChange={setPoweredMinimumHours} canAdd={canAdd}
+            onAdd={row => setRows(current => current.length >= MAX_SCENARIOS || current.some(item => item.key === row.key) ? current : [...current, row])}
+            onClose={() => { setLaunch(undefined); tabs.current[2]?.focus(); }} />
+        </div>}
+        {picked.length > 0 ? <>
+          <details className="compare-disclosure compare-tool" open>
+            <summary>Mission windows</summary>
+            <MissionWindowCheck rows={picked} board={rows} name={label} example={selectInitialRows} synthetic={synthetic} onInspect={(row, time) => openEvidence(row, time)} />
+          </details>
+          <details className="compare-disclosure compare-tool">
+            <summary>Powered contact</summary>
+            <PoweredContactWindow rows={picked} name={label} minimumHours={poweredMinimumHours}
+              onMinimumChange={setPoweredMinimumHours} clock={clock} />
+          </details>
+        </> : <p>Select scenarios in Overview to analyze the mission windows.</p>}
+        {picked.length > 1 && <CopilotExplanation key={JSON.stringify(picked.map(row => row.key))} candidates={picked.map(row => ({
+          name: `${label(row).slice(0, 75)} · ${row.request.time_range.start_utc.slice(0, 16).replace("T", " ")} UTC`,
+          sunlight_fraction: row.site.metrics.illumination_fraction,
+          earth_visibility_fraction: row.site.metrics.earth_visibility_fraction,
+          longest_darkness_hours: row.site.metrics.longest_darkness_hours,
+        }))} />}
+        <details className="compare-disclosure">
+          <summary>Metric definitions</summary>
+          <dl className="compare-metric-definitions">{metrics.map(metric => <div key={metric.key}>
+            <dt>{metric.label}</dt><dd>{metric.meaning}</dd>
+          </div>)}</dl>
+        </details>
+        {audience === "Educator" && <details className="compare-disclosure">
+          <summary>Classroom exercise</summary>
+          <ol><li>Predict which site can see Earth for longer.</li><li>Choose Sunlight and Earth in view and set a 72-hour minimum.</li><li>Set geometric margins of 80% of the solar disk and more than 1° of Earth clearance. Did your choice change?</li></ol>
+        </details>}
+      </>}
+    </div>
+    {busy && <p role="status">Analyzing scenario…</p>}
+    {error && <p role="alert" className="guide-error">{error}</p>}
+    <div hidden={view !== "Analysis" && rows.length > 0 && !rows.some(row => row.constraint_status?.passes === false)}>
+
     {(result?.candidates.length === 0 || !!alternatives.length || rows.some(row => row.constraint_status?.passes === false)) && <section className="scenario-alternatives"><h3>Try instead</h3>
       {!alternatives.length ? <p>No alternatives were returned for this mission. You can edit the area, dates, or required limits and analyze again.</p> :
         <div className="scenario-alternative-grid">{alternatives.slice(0, 3).map(alternative => {
@@ -265,5 +572,6 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
         })}</div>}
     </section>}
     <details className="scenario-limitations"><summary>What this can’t tell you</summary><p>Earth in view describes geometry. It cannot establish a reliable radio link. Estimated panel output excludes dust, temperature, and degradation. The battery check assumes constant load and a full usable battery before the longest night. Terrain indicators cannot establish landing safety.</p></details>
+    </div>
   </section>;
 }

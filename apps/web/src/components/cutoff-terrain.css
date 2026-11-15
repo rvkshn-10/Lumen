@@ -1,0 +1,45 @@
+.cutoff-terrain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 16px;
+  margin-block: 16px;
+}
+.cutoff-terrain-reading {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.cutoff-terrain h5 { margin: 0 0 6px; font-size: 1rem; font-weight: 600; }
+.cutoff-terrain time { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.cutoff-terrain-reading dl { display: grid; gap: 6px; margin: 12px 0 0; }
+.cutoff-terrain-reading dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+}
+.cutoff-terrain-reading dt { color: var(--text-secondary); }
+.cutoff-terrain-reading dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.cutoff-terrain-reading button { min-height: 44px; }
+.cutoff-terrain-blocker { margin: 16px 0; }
+.cutoff-sight-line {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  height: 72px;
+  margin-top: 8px;
+}
+.cutoff-blocked-region { fill: var(--line); }
+.cutoff-horizon-line { stroke: var(--text-secondary); stroke-width: 1; }
+.cutoff-visible-line { stroke: var(--text-primary); stroke-width: 2; }
+.cutoff-obscured-line { stroke: var(--text-primary); stroke-width: 2; stroke-dasharray: 5 4; }
+.cutoff-observer, .cutoff-visible-body { fill: var(--text-primary); }
+.cutoff-obscured-body { fill: var(--line); stroke: var(--text-primary); stroke-width: 1.5; }
+
+@media print {
+  .cutoff-terrain time, .cutoff-terrain-reading dt { color: #333; }
+  .cutoff-blocked-region { fill: #e6e6e6; }
+  .cutoff-horizon-line, .cutoff-visible-line, .cutoff-obscured-line { stroke: #333; }
+  .cutoff-observer, .cutoff-visible-body { fill: #333; }
+  .cutoff-obscured-body { fill: #fff; stroke: #333; }
+}

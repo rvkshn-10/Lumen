@@ -27,22 +27,36 @@ def check(page, url: str) -> list[dict]:
     expect(board).to_be_visible()
     sites = {site["id"]: site for site in result["candidates"]}
     assert len(sites) >= 2, "The demo window needs two eligible locations"
-    for checkbox in board.get_by_role("checkbox").all():
+    board.locator(".compare-management > summary").click()
+    scenario_rows = board.get_by_role("region", name="Scenarios", exact=True)
+    for checkbox in scenario_rows.get_by_role("checkbox").all():
         checkbox.check()
 
-    expect(board.get_by_role("region", name="Compare selected scenarios")).to_be_visible()
+    comparison = board.get_by_role("region", name="Comparison values", exact=True)
+    expect(comparison).to_be_visible()
+    records = comparison.locator("[data-metric]").evaluate_all(
+        """(elements, start) => elements.map(element => ({
+          metric: element.dataset.metric, raw: element.dataset.raw,
+          start_utc: start, display: element.textContent.trim()
+        }))""",
+        result["request"]["time_range"]["start_utc"],
+    )
+    assert len(records) >= 3 * min(4, len(sites))
+
+    board.get_by_role("tab", name="Timeline", exact=True).click()
     clock = board.get_by_role("slider", name="Compare time")
     for _ in range(10):
         clock.press("ArrowRight")
-
-    records = board.locator(".scenario-table [data-metric]").evaluate_all(
+    board.locator("summary").filter(has_text="Upcoming cutoffs").click()
+    cutoffs = board.get_by_role("region", name="Upcoming cutoffs", exact=True)
+    expect(cutoffs).to_be_visible()
+    records += cutoffs.locator("[data-metric]").evaluate_all(
         """elements => elements.map(element => ({
           metric: element.dataset.metric, raw: element.dataset.raw,
           start_utc: element.closest("tr").dataset.scenarioStart,
           display: element.textContent.trim()
         }))"""
     )
-    assert len(records) >= 3 * min(4, len(sites))
     for record in records:
         site_id, key = record["metric"].rsplit(":", 1)
         site = sites[site_id]

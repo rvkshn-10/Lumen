@@ -1,8 +1,12 @@
+import { useLayoutEffect, useState } from "react";
 import { GuidedPlanner } from "./components/GuidedPlanner";
+import { applyAppearance, readAppearance } from "./lib/appearance";
 
 export default function App() {
+  const [appearance, setAppearance] = useState(readAppearance);
+  useLayoutEffect(() => applyAppearance(appearance), [appearance]);
+
   return <main id="top">
-    <header className="topbar"><a className="brand" href="#top" aria-label="Lumen home"><img src="/lumen-mark.svg" alt="" /><span>LUMEN<span className="brand-caption">LUNAR EXPLORATION PLANNER</span></span></a><span className="prototype-badge">RESEARCH PROTOTYPE</span></header>
-    <GuidedPlanner />
+    <GuidedPlanner appearance={appearance} onAppearance={setAppearance} />
   </main>;
 }

@@ -97,7 +97,10 @@ The plan's next workflows are now available:
   These use existing results without additional analysis requests.
 - **Mission briefs**: a local, documented phrase parser turns dates, approved landmarks,
   numeric constraints and priorities into a reviewable draft. Apply it to the form before
-  running a search. This is deterministic text interpretation, not an LLM or a science engine.
+  running a search. The optional [OpenVINO mission copilot](docs/local-mission-copilot.md)
+  adds local AI-assisted drafting and explanations for calculated comparisons.
+- **Crater inspection**: inspect [OpenVINO crater candidates](docs/connecting-ridge-crater-sample.md)
+  over a NASA LROC image at Shackleton Connecting Ridge.
 - **Mission library**: four representative presets, named browser-local configurations,
   and validated JSON import/export. Results are not persisted or mixed across windows.
 - **Advanced filters**: roughness, elevation bounds, continuous sunlight/Earth opportunity,

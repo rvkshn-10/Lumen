@@ -17,6 +17,14 @@ export const utcTime = (value: string) =>
     minute: "2-digit",
     timeZone: "UTC",
   }) + " UTC";
+const utcRangeFormatter = new Intl.DateTimeFormat("en-GB", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
+export const utcRange = ({ start_utc, end_utc }: { start_utc: string; end_utc: string }) =>
+  utcRangeFormatter.formatRange(new Date(start_utc), new Date(end_utc)) + " UTC";
+
 export function downloadJson(value: unknown, filename: string) {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }),

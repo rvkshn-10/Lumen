@@ -15,7 +15,6 @@ def enrich(detail: dict, request: SearchRequest, evaluate, *, sun_distance) -> d
     timeline = detail["timeline"]
     for row, distance in zip(timeline, sun_distance, strict=True):
         row["sun_distance_km"] = float(distance)
-    detail["power"] = power_estimate(timeline, request.power)
     events = extract_events(timeline, evaluate)
     detail["events"] = events
     instant = request.scrub_time_utc or request.time_range.start_utc
@@ -24,6 +23,7 @@ def enrich(detail: dict, request: SearchRequest, evaluate, *, sun_distance) -> d
     states = np.array([row["earth_elevation_deg"] - row["earth_horizon_deg"]
                        > request.dte_margin_deg for row in timeline])
     hours = np.array([(b - a).total_seconds() / 3600 for a, b in pairwise(times)])
+    detail["power"] = power_estimate(timeline, request.power, dte_states=states)
     fraction, longest, blackout = visibility_metrics(states, hours)
     for row, state in zip(timeline, states, strict=True):
         row["dte_contact"] = bool(state)

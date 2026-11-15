@@ -71,8 +71,8 @@ export function publicLimitErrors(request: SearchRequest, catalog: CoverageCatal
   if (request.region.selector_type === "southern_hemisphere" && !catalog.hemisphere_survey) errors.push("Whole-hemisphere survey data are unavailable on this service. Choose a local area or retry coverage.");
   if (request.region.center && request.region.center.latitude_deg > -87 && !catalog.hemisphere_detailed) errors.push("Detailed hemisphere terrain is unavailable on this service. Choose a prepared polar area.");
   if (usesHemisphereTerrain(request)) {
-    if (request.hard_constraints.maximum_distance_to_psr_km != null) errors.push("PSR-distance requirements are unavailable for hemisphere terrain. Remove the requirement under Advanced.");
-    if (request.hard_constraints.science_feature_ids?.length || request.hard_constraints.maximum_distance_to_science_feature_km != null) errors.push("Named-feature proximity requirements are unavailable for hemisphere terrain. Remove them explicitly under Advanced.");
+    if (request.hard_constraints.maximum_distance_to_psr_km != null) errors.push("PSR-distance requirements are unavailable for hemisphere terrain. Remove the requirement under More options.");
+    if (request.hard_constraints.science_feature_ids?.length || request.hard_constraints.maximum_distance_to_science_feature_km != null) errors.push("Named-feature proximity requirements are unavailable for hemisphere terrain. Remove them explicitly under More options.");
   }
   if (request.region.selector_type !== "southern_hemisphere" && (request.region.search_radius_km ?? Infinity) > limits.maximum_radius_km) errors.push(`Live detailed areas have a maximum ${limits.maximum_radius_km} km radius. Edit the radius or choose the full-region demo.`);
   if (end - start > limits.maximum_live_days * 86400000) errors.push(`Live detailed missions last up to ${limits.maximum_live_days} days. Edit the dates or choose the full-region demo.`);
