@@ -177,14 +177,6 @@ def _longest_runs(states: np.ndarray, hours: np.ndarray) -> tuple[np.ndarray, np
     return np.round(visible, 9), np.round(blocked, 9)
 
 
-@lru_cache(maxsize=8)
-def _step_hours(times: tuple) -> np.ndarray:
-    """Sample durations in hours; identical to the per-batch calculation, computed once per grid."""
-    hours = np.array([(b - a).total_seconds() / 3600 for a, b in pairwise(times)])
-    hours.setflags(write=False)
-    return hours
-
-
 def search_threads() -> int:
     """Worker threads for temporal batches. NumPy releases the GIL inside each kernel."""
     try:
@@ -255,7 +247,7 @@ def analyze_batch(arrays: dict, indices: np.ndarray, times, sun, earth) -> list[
     sun_radius = np.rad2deg(np.arcsin(SUN_RADIUS_KM / sun_distance))
     sunlight = sun_elevation + sun_radius > sun_horizon
     communication = earth_elevation > earth_horizon
-    hours = _step_hours(tuple(times))
+    hours = np.array([(b - a).total_seconds() / 3600 for a, b in pairwise(times)])
     total_hours = hours.sum()
     illumination = np.sum(sunlight[:, :-1] * hours, axis=1) / total_hours
     visibility = np.sum(communication[:, :-1] * hours, axis=1) / total_hours
