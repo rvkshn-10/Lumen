@@ -5,6 +5,7 @@ import type { CuratedSite } from "../lib/experience-api";
 import { clpsMissions } from "../data/clps-missions";
 import { ClpsMissionDetails, MissionReplay } from "./MissionReplay";
 import { PlanningDialog } from "./PlanningEvidence";
+import { CONNECTING_RIDGE_ID, CraterInspection } from "./CraterInspection";
 import type { LunarFeature } from "../lib/types";
 
 const tour = [
@@ -107,6 +108,7 @@ export function CuratedPicker({ features, onPick }: { features: LunarFeature[]; 
         ))}</ul> : <ul className="curated-list">{list.map(site => (
           <li key={site.id}><div><strong>{site.name}</strong><p>{site.analysis === "detailed" ? "Detailed coverage" : "Coarse coverage"}{site.blurb ? ` · ${site.blurb}` : ""}</p></div>
             <button className="secondary-button" onClick={() => select(site)}>{site.kind === "historic" ? "Open replay" : "Choose place"}</button>
+            {site.id === CONNECTING_RIDGE_ID ? <CraterInspection /> : null}
           </li>
         ))}</ul>}
       </>}

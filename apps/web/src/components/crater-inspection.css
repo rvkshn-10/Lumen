@@ -1,0 +1,66 @@
+.crater-inspection {
+  width: 100%;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #33473a;
+}
+
+.crater-inspection summary {
+  cursor: pointer;
+  padding: 6px 0;
+  font-weight: 600;
+}
+
+.crater-inspection-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.crater-inspection-control input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--mint);
+}
+
+.crater-crop {
+  max-width: 640px;
+  margin: 0 0 16px;
+}
+
+.crater-crop-image {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #0d1511;
+}
+
+.crater-crop-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.crater-candidate {
+  position: absolute;
+  border: 1px solid #67f7f2;
+  box-shadow: 0 0 1px #0e2018;
+  pointer-events: none;
+}
+
+.crater-site-marker {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border: 2px solid #ffe087;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #17140b;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.crater-crop figcaption {
+  margin-top: 8px;
+  font-size: 13px;
+}

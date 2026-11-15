@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import router
+from app.copilot_api import router as copilot_router
 from app.coverage_api import router as coverage_router
 from app.exploration_api import router as exploration_router
 from app.global_api import router as global_router
@@ -28,6 +29,7 @@ app.include_router(coverage_router)
 app.include_router(scene_router)
 app.include_router(v2_router)
 app.include_router(horizon_router)
+app.include_router(copilot_router)
 
 
 if settings.static_dir.exists():

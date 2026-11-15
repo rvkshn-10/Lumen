@@ -9,6 +9,7 @@ import type {
   SiteDetail,
   TimeSample,
 } from "./types";
+import type { BriefInterpretation } from "./brief";
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
 export function getFeatures(signal?: AbortSignal): Promise<FeatureCollection> {
@@ -76,12 +77,65 @@ export function searchCandidates(
 }
 export function validateSearch(
   input: SearchRequest,
+  signal?: AbortSignal,
 ): Promise<SearchValidationResponse> {
   return fetch(`${API_BASE}/search/validate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+    signal,
   }).then(expectJson<SearchValidationResponse>);
+}
+
+export async function getCopilotStatus(signal: AbortSignal): Promise<boolean> {
+  const response = await fetch(`${API_BASE}/ai/copilot-status`, { signal });
+  return response.ok && (await expectJson<{ available: boolean }>(response)).available === true;
+}
+
+export class CopilotUnavailableError extends Error {
+  constructor() {
+    super("OpenVINO copilot is unavailable on this server.");
+  }
+}
+
+type CopilotResponse = { engine: "openvino-genai" };
+
+export interface MissionDraft extends BriefInterpretation {
+  validation_errors?: string[];
+}
+
+async function askCopilot<T>(path: string, input: object, signal: AbortSignal): Promise<T & CopilotResponse> {
+  const response = await fetch(`${API_BASE}/ai/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    signal,
+  });
+  if (response.status === 503 || response.status === 404) {
+    throw new CopilotUnavailableError();
+  }
+  return expectJson<T & CopilotResponse>(response);
+}
+
+export function draftMissionBrief(brief: string, base: SearchRequest, signal: AbortSignal) {
+  return askCopilot<MissionDraft>("mission-draft", { brief, base }, signal);
+}
+
+export interface ExplanationCandidate {
+  name: string;
+  sunlight_fraction: number;
+  earth_visibility_fraction: number;
+  longest_darkness_hours: number;
+}
+
+export type ExplanationGoal = "balanced" | "sunlight" | "earth" | "darkness";
+
+export function explainMissionComparison(
+  candidates: ExplanationCandidate[],
+  goal: ExplanationGoal,
+  signal: AbortSignal,
+) {
+  return askCopilot<{ explanation: string }>("mission-explanation", { candidates, goal }, signal);
 }
 
 export type HorizonSample = Pick<

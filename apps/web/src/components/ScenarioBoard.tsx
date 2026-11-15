@@ -11,6 +11,7 @@ import { CutoffTerrainEvidence } from "./CutoffTerrainEvidence";
 import { MissionWindowCheck } from "./MissionWindowCheck";
 import { sampleIndexAt } from "../lib/mission-window";
 import { HorizonReview } from "./HorizonReview";
+import { CopilotExplanation } from "./CopilotExplanation";
 import "./scenario-board.css";
 
 const GlobeScene = lazy(() => import("./GlobeScene").then(module => ({ default: module.GlobeScene })));
@@ -326,6 +327,12 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
               ? <small className="scenario-best">Best in comparison</small>
               : <small>{metric.key.endsWith("_fraction") ? `${(Math.abs(best - value(row, metric.key)!) * 100).toFixed(1)} percentage points` : metric.format(Math.abs(best - value(row, metric.key)!))} from best</small>)}</td>)}</tr>;
         })}</tbody></table></div>
+      <CopilotExplanation key={JSON.stringify(picked.map(row => row.key))} candidates={picked.map(row => ({
+        name: `${label(row).slice(0, 75)} · ${row.request.time_range.start_utc.slice(0, 16).replace("T", " ")} UTC`,
+        sunlight_fraction: row.site.metrics.illumination_fraction,
+        earth_visibility_fraction: row.site.metrics.earth_visibility_fraction,
+        longest_darkness_hours: row.site.metrics.longest_darkness_hours,
+      }))} />
       {mapSites.length > 1 && <button className="secondary-button" aria-expanded={map} onClick={() => setMap(current => !current)}>{map ? "Hide selected locations" : "Locate selected sites on the Moon"}</button>}
       {map && mapSites.length > 1 && <div className="scenario-map"><Suspense fallback={<p role="status">Loading Moon…</p>}><GlobeScene sites={mapSites} selectedCenter={mapSites[0]} timeRange={{ start_utc: new Date(start).toISOString(), end_utc: new Date(end).toISOString() }} preparedLabel="Selected scenario locations" /></Suspense></div>}
     </section>}
