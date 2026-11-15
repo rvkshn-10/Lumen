@@ -64,7 +64,8 @@ collapse time windows or reuse another area's results. Successful responses only
 are cached, and cached objects are decoded independently for each response.
 
 The epoch tracks terrain/catalog/feature metadata, source artifacts, survey and
-global horizon artifacts, pinned kernels, all backend code, kernel mode and radius
+global horizon artifacts, pinned kernels, Python/scientific-library versions,
+all backend code, kernel mode and radius
 configuration. Small JSON manifests are also content-hashed. Windows NT ChangeTime
 and file identity detect artifact changes even when LastWriteTime is preserved.
 Small artifacts are content-fingerprinted to cover coarse timestamp collisions.

@@ -6,9 +6,11 @@ import gzip
 import hashlib
 import json
 import os
+import sys
 import tempfile
 import zlib
 from collections import OrderedDict
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import orjson
@@ -20,7 +22,7 @@ MAX_BYTES = 64 * 1024 * 1024
 
 
 def cached_result(operation: str, request: str, sources: str, calculate, *, root: Path = ROOT):
-    key = hashlib.sha256(json.dumps(["v2-result-2", os.getenv("LUMEN_SCIENCE_REVISION", "direct"), operation, request, sources, code_revision()]).encode()).hexdigest()
+    key = hashlib.sha256(json.dumps(["v2-result-2", os.getenv("LUMEN_SCIENCE_REVISION", "direct"), operation, request, sources, code_revision(), software_revision()]).encode()).hexdigest()
     path = root / f"{key}.json.gz"
     try:
         envelope = json.loads(gzip.decompress(path.read_bytes()))
@@ -49,6 +51,16 @@ def cached_result(operation: str, request: str, sources: str, calculate, *, root
         except OSError:
             pass  # Read-only hosting still returns freshly computed science.
     return result
+
+
+def software_revision():
+    packages = []
+    for name in ("numpy", "spiceypy", "numba"):
+        try:
+            packages.append((name, version(name)))
+        except PackageNotFoundError:
+            packages.append((name, None))
+    return (sys.version_info[:3], tuple(packages))
 
 
 def code_revision():

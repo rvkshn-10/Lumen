@@ -84,3 +84,13 @@ def test_small_artifact_stamp_uses_content_when_metadata_clock_collides(tmp_path
     path.write_bytes(b"modified")
     os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
     assert terrain_store.digest(path) != first
+
+
+def test_worker_revision_changes_with_scientific_software_versions(tmp_path, monkeypatch):
+    from app.services import result_cache
+    environment = {"LUMEN_DATA_ROOT": str(tmp_path), "LUMEN_KERNEL_ROOT": str(tmp_path),
+                   "LUMEN_HEMISPHERE_ROOT": str(tmp_path), "LUMEN_GLOBAL_ROOT": str(tmp_path)}
+    monkeypatch.setattr(result_cache, "software_revision", lambda: ("runtime-v1",))
+    previous = source_revision(environment)
+    monkeypatch.setattr(result_cache, "software_revision", lambda: ("runtime-v2",))
+    assert source_revision(environment) != previous
