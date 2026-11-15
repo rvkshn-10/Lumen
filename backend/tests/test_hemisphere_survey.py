@@ -1,4 +1,5 @@
 import json
+import shutil
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
@@ -104,3 +105,56 @@ def test_whole_hemisphere_keeps_seven_day_limit():
     )
     with pytest.raises(SearchValidationError, match="7 days"):
         validate_search(request, hemisphere=True)
+
+
+@pytest.fixture
+def bundled(tmp_path, monkeypatch):
+    from app import global_api
+
+    directory = tmp_path / "bundle"
+    shutil.copytree(survey.BUNDLE_ROOT, directory)
+    provenance = json.loads((directory / "manifest.json").read_text())
+    monkeypatch.setattr(survey, "ROOT", tmp_path / "missing-raw-dem")
+    monkeypatch.setattr(survey, "BUNDLE_ROOT", directory)
+    monkeypatch.setattr(global_api, "global_grid", lambda: (provenance["global_source"], None))
+    survey._load.cache_clear()
+    return directory
+
+
+def test_bundled_survey_search_and_inspection_without_raw_dem(bundled):
+    from app.services.search import search
+    from app.services.sites import site_analysis
+
+    metadata, arrays = survey.load()
+    request = SearchRequest(region=RegionSelection(selector_type="southern_hemisphere"),
+                            time_range=TimeRange(start_utc="2028-10-01T00:00:00Z",
+                                                 end_utc="2028-10-02T00:00:00Z"))
+    result = search(request, prepared=(metadata, arrays))
+    assert result["counts"]["region"] == 827
+    candidate = result["candidates"][0]
+    assert site_analysis(candidate["id"], request)["metrics"] == candidate["metrics"]
+
+
+@pytest.mark.parametrize("filename", ["manifest.json", "terrain.npz"])
+def test_bundled_survey_rejects_corruption(bundled, filename):
+    assert survey.ready()
+    (bundled / filename).write_bytes(b"corrupt")
+    assert not survey.ready()
+
+
+def test_bundled_survey_rejects_changed_global_source(bundled, monkeypatch):
+    from app import global_api
+
+    monkeypatch.setattr(global_api, "global_grid", lambda: ({"changed": True}, None))
+    assert not survey.ready()
+
+
+def test_survey_only_coverage_never_advertises_detailed_terrain(bundled, monkeypatch):
+    from app import coverage_api
+    from app.services import hemisphere_terrain, search_runtime
+
+    monkeypatch.setattr(hemisphere_terrain, "ready", lambda: False)
+    monkeypatch.setattr(search_runtime, "instance", None)
+    coverage = coverage_api.catalog()
+    assert coverage["hemisphere_survey"] is True
+    assert coverage["hemisphere_detailed"] is False

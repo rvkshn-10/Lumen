@@ -132,9 +132,9 @@ def catalog():
     if (instance and instance.verified_revision is not None
             and worker_pool._process is not None and worker_pool._process.poll() is None
             and instance.verified_revision == worker_pool.source_revision(instance.environment)):
-        return {**result, "hemisphere_detailed": True, "hemisphere_survey": instance.survey_ready}
+        return {**result, "hemisphere_detailed": instance.detailed_ready, "hemisphere_survey": instance.survey_ready}
     detailed_ready = ready()
-    return {**result, "hemisphere_detailed": detailed_ready, "hemisphere_survey": detailed_ready and survey_ready()}
+    return {**result, "hemisphere_detailed": detailed_ready, "hemisphere_survey": survey_ready()}
 
 
 @router.get("")

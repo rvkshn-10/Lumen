@@ -59,6 +59,9 @@ def source_revision(environment):
     global_root = Path(environment.get("LUMEN_GLOBAL_ROOT", str(code_root.parents[1] / "data/derived/global-preview-v1")))
     paths.update([hemisphere / "survey/manifest.json", hemisphere / "survey/terrain.npz",
                   global_root / "metadata.json", global_root / "elevation.npz"])
+    survey_root = Path(environment.get("LUMEN_SURVEY_ROOT", str(code_root.parents[1] / "data/derived/hemisphere-survey-v2")))
+    paths.update([survey_root / "manifest.json", survey_root / "terrain.npz",
+                  code_root / "data/hemisphere-survey-release.json"])
     from app.services.result_cache import software_revision
     from app.services.terrain_store import artifact_stamp
 

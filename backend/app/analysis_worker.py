@@ -26,6 +26,7 @@ def calculate(operation, payload):
     try:
         if operation == "prepare":
             from app.models import SearchRequest
+            from app.services.dataset import DataUnavailable
             from app.services.ephemeris import load_kernels
             from app.services.hemisphere_survey import load
             from app.services.hemisphere_terrain import prepare, source
@@ -33,11 +34,15 @@ def calculate(operation, payload):
 
             with preparation_control.speculative():
                 started = perf_counter()
-                source()
+                detailed_ready = False
+                try:
+                    source()
+                    detailed_ready = True
+                except DataUnavailable:
+                    pass  # Survey-only hosts intentionally omit the raw DEM.
                 preparation_control.checkpoint()
                 load_kernels(settings.kernel_root)
                 preparation_control.checkpoint()
-                from app.services.dataset import DataUnavailable
                 survey_ready = False
                 try:
                     load()  # The installed 827-site survey, never dense hemisphere preparation.
@@ -51,7 +56,7 @@ def calculate(operation, payload):
                     from app.services.validation import validate_search
                     validate_search(request, hemisphere=True)
                     prepare(request.region)
-                result = {"state": "ready", "seconds": perf_counter() - started, "verified_sources": True, "survey_ready": survey_ready}
+                result = {"state": "ready", "seconds": perf_counter() - started, "verified_sources": True, "survey_ready": survey_ready, "detailed_ready": detailed_ready}
         elif operation == "search":
             from app.api import candidate_search_calculation
             from app.models import SearchRequest

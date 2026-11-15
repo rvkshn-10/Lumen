@@ -36,6 +36,7 @@ class SearchRuntime:
         self.revision = None
         self.verified_revision = None
         self.survey_ready = False
+        self.detailed_ready = False
         self.job = None
         self.background = None
         self.background_process = None
@@ -99,6 +100,7 @@ class SearchRuntime:
                 if response["result"].get("verified_sources"):
                     self.verified_revision = worker_pool._revision
                     self.survey_ready = response["result"].get("survey_ready", False)
+                    self.detailed_ready = response["result"].get("detailed_ready", False)
                 job.update(state="ready", message="Installed data prepared. Mission calculations run on submission.")
         except (OSError, ValueError, TimeoutError, MemoryError, psutil.Error):
             job.update(state="unavailable", message="Preparation unavailable. You can submit normally.")

@@ -1,5 +1,37 @@
 # Whole southern hemisphere ranking
 
+## Compact hosted survey
+
+Production images include the checksum-pinned 533,416-byte terrain archive under
+`data/derived/hemisphere-survey-v2`. Its manifest carries the original verified
+LOLA source metadata and global horizon grid metadata. A release pin committed
+with the backend authenticates that manifest; runtime verifies the archive,
+source fingerprint, installed global grid, lattice, IDs, shapes and finite values.
+Dates, priorities, constraints, solar/Earth geometry and scores are calculated live.
+This is prepared terrain, not a saved search result or synthetic fallback.
+
+When installed raw terrain/survey exists it retains the original verification
+path. Otherwise the bundled survey enables `hemisphere_survey` independently of
+`hemisphere_detailed`. Search, site inspection, comparison and shifted dates use
+the same survey provider. Dense local refinement still requires the raw DEM;
+its controls are shown only when detailed terrain is available.
+
+No paid disk or raw 9.2 GB dataset is needed for the survey deployment. Render's
+free CPU/memory limits and cold starts still apply; verify the actual deployed
+service before presentation. A fresh-checkout Docker CI job performs a real
+seven-day survey and checks candidate inspection consistency:
+
+```text
+python scripts/verify_hosted_hemisphere.py --url https://lumenmissionplanner.earth --days 7
+```
+
+To republish after intentionally changing the science sources, prepare and verify
+the raw terrain and survey locally, then run
+`python scripts/data/export_hemisphere_survey.py`. Review and commit the bundle
+and `backend/app/data/hemisphere-survey-release.json` together. An unexpected
+global grid/source or archive change disables the bundle instead of serving
+unverified results.
+
 Choose **Survey the hemisphere** above the Moon in the planner. Select a mission window of up to seven days and ranking priorities, then
 run the normal search. It ranks 827 regional locations across the south and
 returns five shortlisted sites plus eligible map points. **Refine Candidate ·
@@ -84,8 +116,8 @@ These are smoke measurements, not P95 qualification. Independent verification
 passed 97 checks; targeted backend tests passed 27 checks (two inapplicable cases
 skipped). Frontend tests and TypeScript/production build passed.
 
-The survey is enabled locally. Hosted deployment also needs the installed
-hemisphere data directory and survey subdirectory; this work does not deploy it.
+Detailed local refinement needs the installed hemisphere data directory.
+Survey-only deployments use the compact bundle described above.
 
 Background preparation and the Intel-only 15 km development mode are documented
 in [search-warmup.md](search-warmup.md). The survey remains a regional sample;

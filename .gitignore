@@ -30,6 +30,7 @@ data/derived/pgda-demo-v1/*
 !data/derived/pgda-demo-v1/psr.json
 # NASA trajectory paths (processed, ~1 MB) ship with the app; raw SPK files stay in data/raw/.
 !data/derived/nasa-trajectories/
+!data/derived/hemisphere-survey-v2/
 data/cache/
 backend/app/data/derived/
 

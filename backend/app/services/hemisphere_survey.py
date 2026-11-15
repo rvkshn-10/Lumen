@@ -7,15 +7,19 @@ This does not claim to find the optimum among all 500 m surface locations.
 
 import hashlib
 import json
+import os
 from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 
 from app.services.dataset import DataUnavailable
 from app.services.hemisphere_terrain import RADIUS, ROOT, source
 from app.services.terrain_store import artifact_stamp, digest
+from app.settings import PACKAGE_ROOT, REPOSITORY_ROOT
 
 VERSION = "southern-hemisphere-survey-5deg-v2"
+BUNDLE_ROOT = Path(os.getenv("LUMEN_SURVEY_ROOT", REPOSITORY_ROOT / "data/derived/hemisphere-survey-v2"))
 
 
 def grid():
@@ -32,9 +36,8 @@ def fingerprint(metadata):
 
 
 @lru_cache(maxsize=2)
-def _load(stamps, source_key):
+def _load(stamps, source_key, directory):
     del stamps
-    directory = ROOT / "survey"
     manifest = json.loads((directory / "manifest.json").read_text())
     path = directory / "terrain.npz"
     if (
@@ -67,8 +70,18 @@ def _load(stamps, source_key):
 
 def load():
     try:
-        metadata, _ = source()
-        directory = ROOT / "survey"
+        # A bundled survey carries verified derived terrain and pinned source
+        # provenance. It needs no raw DEM at runtime and grants no local refinement.
+        bundled = not (ROOT / "survey/manifest.json").exists() and (BUNDLE_ROOT / "manifest.json").exists()
+        directory = BUNDLE_ROOT if bundled else ROOT / "survey"
+        if bundled:
+            release = json.loads((PACKAGE_ROOT / "data/hemisphere-survey-release.json").read_text())
+            if digest(directory / "manifest.json") != release["manifest_sha256"]:
+                raise DataUnavailable("Bundled hemisphere survey provenance integrity failed")
+            provenance = json.loads((directory / "manifest.json").read_text())
+            metadata = provenance["detailed_source"]
+        else:
+            metadata, _ = source()
         stamps = tuple(
             artifact_stamp(p)
             for p in (directory / "manifest.json", directory / "terrain.npz")
@@ -76,8 +89,10 @@ def load():
         from app.global_api import global_grid
 
         global_metadata, _ = global_grid()
+        if bundled and provenance["global_source"] != global_metadata:
+            raise DataUnavailable("Bundled survey global horizon source changed")
         manifest, arrays = _load(
-            stamps, fingerprint({"detailed": metadata, "global": global_metadata})
+            stamps, fingerprint({"detailed": metadata, "global": global_metadata}), directory
         )
         return {
             "dataset_version": VERSION,

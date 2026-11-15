@@ -11,6 +11,7 @@ data/raw
 data/cache
 data/derived/*
 !data/derived/pgda-demo-v1/
+!data/derived/hemisphere-survey-v2/
 data/derived/pgda-demo-v1/*
 !data/derived/pgda-demo-v1/metadata.json
 !data/derived/pgda-demo-v1/terrain.json
