@@ -1,0 +1,93 @@
+.solar-generation {
+  margin-block: clamp(1.5rem, 4vw, 2.75rem) 0;
+  padding-block-start: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+.scenario-board .solar-generation h3 {
+  margin: 0;
+  font-size: clamp(1.3rem, 2.1vw, 1.65rem);
+}
+.solar-assumptions {
+  margin-block: .35rem .8rem;
+  color: var(--text-secondary);
+}
+.solar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem 1.25rem;
+  list-style: none;
+  margin: 0 0 .9rem;
+  padding: 0;
+}
+.solar-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: .92rem;
+}
+.solar-frame {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: .75rem .7rem;
+  padding-block: .1rem .5rem;
+  color: var(--text-secondary);
+  font-size: .85rem;
+  font-variant-numeric: tabular-nums;
+}
+.solar-unit { grid-column: 1 / -1; }
+.solar-y-labels {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  margin-block: -.6em;
+  text-align: right;
+  line-height: 1.2;
+}
+.solar-plot {
+  display: block;
+  grid-column: 2;
+  width: 100%;
+  height: clamp(9rem, 23vw, 15rem);
+  overflow: visible;
+}
+.solar-gridline, .solar-line, .solar-cursor { vector-effect: non-scaling-stroke; }
+.solar-gridline { stroke: var(--line); }
+.solar-line { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.solar-cursor { stroke: var(--line-strong); stroke-dasharray: 3 3; }
+.solar-x-labels {
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  text-align: center;
+  line-height: 1.2;
+}
+.solar-x-labels > :first-child { text-align: left; }
+.solar-x-labels > :last-child { text-align: right; }
+.solar-x-labels small { display: block; margin-top: .18rem; font-size: .9em; }
+.solar-time-unit { grid-column: 2; text-align: center; }
+.solar-readings > summary { width: fit-content; min-height: 44px; padding-block: .8rem; }
+.solar-readings > label { width: min(100%, 30rem); }
+.solar-readings output { font-variant-numeric: tabular-nums; }
+.solar-readings dl { margin: 0 0 .8rem; padding: 0; width: min(100%, 30rem); }
+.solar-readings dl div {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding-block: .5rem;
+}
+.solar-readings dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.solar-readings dd small { display: block; color: var(--text-secondary); }
+
+@media (max-width: 36rem) {
+  .solar-frame { column-gap: .45rem; }
+  .solar-x-labels { font-size: .78rem; }
+}
+
+@media print {
+  .solar-readings { display: none; }
+  .solar-generation { break-inside: avoid; }
+}

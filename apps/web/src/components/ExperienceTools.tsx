@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Audience } from "../lib/scenarios";
+import type { Appearance } from "../lib/appearance";
 import { getCuratedSites } from "../lib/experience-api";
 import type { CuratedSite } from "../lib/experience-api";
 import { clpsMissions } from "../data/clps-missions";
@@ -14,7 +15,8 @@ const tour = [
   ["Set the mission", "Choose dates and a ranking priority, then review your mission and find candidate sites."],
   ["Compare sites", "Select sites to compare. Duplicate a scenario to try another date."],
 ];
-export function ExperienceTools({ audience, onAudience, candidateCount }: {
+export function ExperienceTools({ appearance, onAppearance, audience, onAudience, candidateCount }: {
+  appearance: Appearance; onAppearance: (value: Appearance) => void;
   audience: Audience; onAudience: (value: Audience) => void; candidateCount?: number;
 }) {
   const [open, setOpen] = useState(false);
@@ -25,11 +27,20 @@ export function ExperienceTools({ audience, onAudience, candidateCount }: {
     </button>
     {open && <PlanningDialog title="Help & settings" onClose={() => setOpen(false)}>
       <div className="planner-help">
-        <label className="field">View mode
-          <select value={audience} onChange={event => onAudience(event.target.value as Audience)}>
-            <option>Public</option><option>Educator</option><option>Planner</option>
-          </select>
-        </label>
+        <div className="planner-preferences">
+          <label className="field">Appearance
+            <select value={appearance} onChange={event => onAppearance(event.target.value as Appearance)}>
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
+          <label className="field">View mode
+            <select value={audience} onChange={event => onAudience(event.target.value as Audience)}>
+              <option>Public</option><option>Educator</option><option>Planner</option>
+            </select>
+          </label>
+        </div>
         <details className="advanced-mission">
           <summary>Quick tour</summary>
           <div className="tour-current" aria-live="polite">

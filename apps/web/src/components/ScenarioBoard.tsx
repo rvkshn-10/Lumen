@@ -11,6 +11,7 @@ import { MissionWindowCheck } from "./MissionWindowCheck";
 import { sampleIndexAt } from "../lib/mission-window";
 import { HorizonReview } from "./HorizonReview";
 import { CopilotExplanation } from "./CopilotExplanation";
+import { SolarGeneration } from "./SolarGeneration";
 import { Icon } from "./Icon";
 import "./scenario-board.css";
 
@@ -231,6 +232,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
   const [busy, setBusy] = useState(false);
   const [map, setMap] = useState(false);
   const [terrainOpen, setTerrainOpen] = useState(false);
+  const [terrainView, setTerrainView] = useState<"map" | "terrain">("terrain");
   const [openChart, setOpenChart] = useState<{ key: string; time?: number; revision: number; cutoff?: Cutoff }>();
   const [launch, setLaunch] = useState<{ key: string }>();
   const [poweredMinimumHours, setPoweredMinimumHours] = useState("12");
@@ -380,6 +382,7 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
       {picked.length > 0 && <ComparisonValues rows={picked} options={rows}
         onReplace={(previous, next) => setSelected(current =>
           current.includes(next) ? current : current.map(key => key === previous ? next : key))} />}
+      {picked.length > 0 && <SolarGeneration rows={picked} name={label} start={start} end={end} />}
       {picked.length < 2 && rows.length > 1 && <p className="compare-selection-hint">Select two or more scenarios to compare them.</p>}
       {!rows.length && !available.length && !alternatives.length && <p>No scenarios to compare.</p>}
       {(rows.length > 0 || available.length > 0) && <details className="compare-management">
@@ -479,11 +482,17 @@ export function ScenarioBoard({ result, audience, onInspect, onSummarySelection,
         {terrain && mapSites.length > 0 && <details className="compare-disclosure" open={terrainOpen} onToggle={event => setTerrainOpen(event.currentTarget.open)}>
           <summary>Shared terrain at the compare clock</summary>
           {terrainOpen && <div className="scenario-terrain">
+            <label className="field compare-terrain-view">Terrain view
+              <select value={terrainView} onChange={event => setTerrainView(event.target.value === "map" ? "map" : "terrain")}>
+                <option value="terrain">3D terrain</option>
+                <option value="map">2D map</option>
+              </select>
+            </label>
             {sceneSample ? <Suspense fallback={<p role="status">Loading shared terrain…</p>}><TerrainScene terrain={terrain} candidates={activeSites}
               selected={activeSites[0].id} onSelect={id => {
                 const row = activeRowsBySite.get(id);
                 if (row) openEvidence(row, clock);
-              }} compare={mapSites.map(site => site.id)} sample={sceneSample} mode="terrain" layer="terrain"
+              }} compare={mapSites.map(site => site.id)} sample={sceneSample} mode={terrainView} layer="terrain"
               mapCandidates={result?.map_candidates ?? []} psr={null} features={[]} /></Suspense>
               : <p>No selected scenario covers this clock time.</p>}
             <div className="scenario-tools">{mapSites.map((site, index) => <span key={site.id}>

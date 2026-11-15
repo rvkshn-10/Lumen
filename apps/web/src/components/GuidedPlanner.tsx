@@ -7,6 +7,7 @@ import { getCoverage, PlanningError, previewCoverage, runAnalysis } from "../lib
 import type { AnalysisState } from "../lib/planning-api";
 import { DEFAULT_REQUEST, shiftWindow } from "../lib/missions";
 import { downloadJson, utcRange } from "../lib/format";
+import type { Appearance } from "../lib/appearance";
 import { VerifiedArea } from "./VerifiedArea";
 import { PlanningMission } from "./PlanningMission";
 import type { Audience } from "../lib/scenarios";
@@ -27,7 +28,7 @@ function initialRequest(): SearchRequest {
     time_range: { start_utc: "2028-10-01T00:00:00Z", end_utc: "2028-10-08T00:00:00Z" } };
 }
 const phases = { timeout: "Search time limit reached", submitting: "Submitting mission", queued: "Waiting in the queue", running: "Analysis running", complete: "Analysis complete", canceled: "Analysis canceled", failed: "Analysis failed", expired: "Analysis expired", queue_full: "The queue is full", waking: "Service waking up", outside: "Outside prepared coverage" };
-export function GuidedPlanner() {
+export function GuidedPlanner({ appearance, onAppearance }: { appearance: Appearance; onAppearance: (value: Appearance) => void }) {
   const [shared, setShared] = useState(() => sharedScenarios(window.location.hash));
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<SearchRequest>(initialRequest);
@@ -183,7 +184,8 @@ export function GuidedPlanner() {
           <button type="button" aria-current={currentStep === 3 ? "step" : undefined}
             disabled={currentStep !== 3 && !result && !busy && !state && !canShowDemo} onClick={openCompare}>Compare</button>
         </nav>
-        <ExperienceTools audience={audience} onAudience={setAudience} candidateCount={catalog?.candidate_count} />
+        <ExperienceTools appearance={appearance} onAppearance={onAppearance}
+          audience={audience} onAudience={setAudience} candidateCount={catalog?.candidate_count} />
       </div>
     </header>
     <div className={`guided-planner explorer-${currentStep === 1 ? "area" : currentStep === 2 ? "mission" : "comparison"}`} id="explorer">

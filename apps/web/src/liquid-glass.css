@@ -1,28 +1,32 @@
-:root {
-  --glass-fill: #242424;
-  --glass-edge: rgb(255 255 255 / 19%);
-  --glass-rim: inset 0 1px rgb(255 255 255 / 27%), inset 0 -1px #0005;
-  --glass-shadow: 0 10px 28px #0006;
+:root, .orbital-scene {
+  --glass-fill: var(--surface-raised);
+  --glass-edge: #0002;
+  --glass-rim: inset 0 1px #fff;
+  --glass-shadow: 0 10px 28px #0002;
   --glass-blur: 22px;
   --glass-backdrop: none;
-  --glass-light: radial-gradient(ellipse at 28% -140%, #ffffff50, transparent 74%),
-    linear-gradient(166deg, #ffffff14, #ffffff03 65%);
+  --glass-light: linear-gradient(166deg, #ffffff9c, transparent 65%);
+}
+
+:root[data-appearance="dark"], .orbital-scene {
+  --glass-edge: #fff3;
+  --glass-rim: inset 0 1px #ffffff36;
+  --glass-shadow: 0 10px 28px #0006;
+  --glass-light: linear-gradient(166deg, #ffffff14, transparent 65%);
 }
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  :root {
-    --glass-fill: rgb(27 27 27 / 65%);
+  :root, .orbital-scene {
+    --glass-fill: color-mix(in srgb, var(--surface-raised) 76%, transparent);
     --glass-backdrop: blur(var(--glass-blur));
   }
 }
 
 #top {
-  background: #000;
+  background: var(--app-background);
   display: flow-root;
   min-height: 100dvh;
 }
-
-#top:has(.explorer-mission, .explorer-comparison) { background: #fff; }
 
 .glass-surface,
 .glass-button,
@@ -45,13 +49,13 @@
   position: sticky;
   top: 0;
   z-index: 8;
-  background: #fafafa;
-  border-bottom: 1px solid #e8e8ed;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
 }
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .planner-masthead {
-    background: rgb(250 250 250 / 90%);
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
     -webkit-backdrop-filter: blur(18px);
     backdrop-filter: blur(18px);
   }
@@ -62,7 +66,7 @@
 }
 
 .glass-button:hover:not(:disabled) {
-  background-color: #ffffff20;
+  background-color: var(--surface-hover);
   color: var(--text-primary);
 }
 
@@ -112,13 +116,13 @@
 
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .planner-masthead {
-    background: #fff;
-    border-color: #d2d2d7;
+    background: var(--surface);
+    border-color: var(--line-strong);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
 
-  :root,
+  :root, :root[data-appearance="dark"], .orbital-scene,
   .planning-dialog,
   .methods-dialog {
     --glass-fill: var(--surface-raised);
@@ -136,6 +140,12 @@
 
 @media (prefers-contrast: more) {
   :root {
+    --line: #787878;
+    --line-strong: #626262;
+    --text-secondary: #333;
+    --text-muted: #4a4a4a;
+  }
+  :root[data-appearance="dark"], .orbital-scene {
     --line: #8c8c8c;
     --line-strong: #a6a6a6;
     --text-secondary: #dedede;
@@ -144,7 +154,7 @@
 }
 
 @media print {
-  :root {
+  :root, :root[data-appearance] {
     color-scheme: light;
     --app-background: white;
     --surface: white;

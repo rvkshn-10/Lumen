@@ -4,21 +4,6 @@
   margin: 0 auto;
   padding: 0 clamp(18px, 4vw, 44px) 48px;
 }
-.planner-masthead, .guided-planner.explorer-mission {
-  color-scheme: light;
-  --app-background: #fff;
-  --surface: #fff;
-  --surface-raised: #f5f5f7;
-  --surface-hover: #ebebed;
-  --text-primary: #1d1d1f;
-  --text-secondary: #515154;
-  --text-muted: #6e6e73;
-  --line: #d2d2d7;
-  --line-strong: #89898d;
-  --mint: var(--text-primary);
-  --muted: var(--text-muted);
-  color: var(--text-primary);
-}
 .planner-masthead-inner {
   width: min(100%, 1068px);
   padding-inline: clamp(14px, 3vw, 28px);
@@ -53,10 +38,15 @@
 .planner-help-trigger:hover { color: var(--text-primary); }
 .planning-dialog:has(.planner-help) { width: min(36rem, calc(100% - 24px)); }
 .planner-help { max-width: 44rem; }
-.planner-help .field { display: grid; gap: 8px; width: min(100%, 16rem); }
+.planner-preferences {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.planner-preferences .field { display: grid; gap: 8px; margin: 0; }
 .planner-help .field select { width: 100%; }
 .planner-help > .advanced-mission { margin-top: 0; padding-block: 10px; }
-.planner-help > .field + details { margin-top: 20px; }
 .planner-help .tour-current { margin-top: 8px; }
 .planner-help :is(.tour-current h3, .advanced-mission p) { margin: 6px 0; }
 .guide-steps {
@@ -133,10 +123,7 @@
 .guide-mission-form > section > .secondary-button { margin-top: 12px; }
 .guide-mission-form .guide-fields { gap: 18px; margin: 14px 0 2px; }
 .guide-mission-form .field { margin: 0; font-size: .92rem; }
-.guide-mission-stage :is(input, select, textarea) { color-scheme: light; }
-.guide-mission-stage input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: brightness(0); opacity: .72; }
-.guide-mission-stage .primary-button { background: #1d1d1f; color: white; border-color: #1d1d1f; min-height: 44px; }
-.guide-mission-stage .primary-button:hover:not(:disabled) { background-color: #3a3a3c; }
+.guide-mission-stage .primary-button { min-height: 44px; }
 .guide-mission-stage .secondary-button { border-color: var(--line); min-height: 44px; }
 .guide-mission-stage > .guide-actions { justify-content: space-between; border-top: 1px solid var(--line); padding-top: 22px; }
 .guide-mission-form > .mission-priority { margin-block: 34px 22px; }
@@ -238,7 +225,6 @@
   .guide-area-stage .guide-stage-tools .text-button { font-size: .86rem; padding-inline: 0; }
   .guide-mission-stage .review-facts { grid-template-columns: 1fr; gap: 0; }
 }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
 @media (max-width: 650px) {
   .guided-planner button, .planning-dialog button { min-height: 44px; font-size: 13px; }
   .guided-planner .text-button, .planning-dialog .text-button { padding: 10px 8px; }
