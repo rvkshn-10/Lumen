@@ -1,22 +1,20 @@
 .powered-contact {
-  margin-block: 18px;
-  padding: clamp(12px, 2.5vw, 22px);
-  border: 1px solid #537361;
-  border-radius: 16px;
-  background: #182c24;
+  margin-block: 16px;
+  min-width: 0;
 }
 .powered-contact .powered-contact-minimum {
   width: min(100%, 16rem);
-  margin-block: 14px;
+  margin-block: 16px;
 }
 .powered-contact-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: 6px 14px;
   list-style: none;
   margin: 0 0 5px;
   padding: 0;
-  font-size: 12px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
 }
 .powered-contact-legend li {
   display: flex;
@@ -36,26 +34,36 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 12px;
-  margin-block: 10px 4px;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  margin-block: 12px 4px;
 }
+.powered-contact-axis > :last-child { text-align: right; }
 .powered-contact-row {
-  padding: 10px 0 13px;
-  border-bottom: 1px solid #476253;
+  padding-block: 12px 14px;
+  border-bottom: 1px solid var(--line);
 }
-.powered-contact-row h4 { margin: 0 0 8px; }
+.powered-contact-row h4 { margin: 0 0 8px; font-size: 1rem; font-weight: 600; }
+.powered-contact-row summary { cursor: pointer; width: fit-content; padding-block: 8px; }
+.powered-contact-row > p { margin-block: 6px; }
 .powered-contact-timeline {
   display: block;
   width: 100%;
   height: 66px;
-  border-radius: 6px;
-  background: #101a17;
+  border-radius: 8px;
+  background: var(--surface);
   margin-block: 5px 8px;
 }
-.powered-contact .window-met { color: #b8f1cd; }
-.powered-contact .window-missed { color: #ffd5a2; }
+.powered-contact .window-met { color: var(--text-primary); }
+.powered-contact .window-missed { color: var(--text-secondary); }
 .powered-contact .field-hint { margin-top: 8px; }
 @media print {
   .powered-contact { background: #fff; color: #000; }
+  .powered-contact-legend, .powered-contact-axis { color: #333; }
   .powered-contact .window-met, .powered-contact .window-missed { color: #222; }
+  .powered-contact-timeline, .powered-contact-legend li::before {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

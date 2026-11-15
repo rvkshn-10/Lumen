@@ -1,34 +1,45 @@
 .cutoff-terrain-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
-  gap: 12px;
-  margin: 14px 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 16px;
+  margin-block: 16px;
 }
 .cutoff-terrain-reading {
   min-width: 0;
-  border: 1px solid #3b584a;
-  border-radius: 12px;
-  background: #14261f;
-  padding: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
 }
-.cutoff-terrain h5 { margin: 0 0 6px; font-size: 13px; }
-.cutoff-terrain time { font-variant-numeric: tabular-nums; }
-.cutoff-terrain-reading dl { margin: 10px 0 0; }
-.cutoff-terrain-reading dl > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; }
-.cutoff-terrain-reading dd { margin: 0; font-variant-numeric: tabular-nums; }
+.cutoff-terrain h5 { margin: 0 0 6px; font-size: 1rem; font-weight: 600; }
+.cutoff-terrain time { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.cutoff-terrain-reading dl { display: grid; gap: 6px; margin: 12px 0 0; }
+.cutoff-terrain-reading dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+}
+.cutoff-terrain-reading dt { color: var(--text-secondary); }
+.cutoff-terrain-reading dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .cutoff-terrain-reading button { min-height: 44px; }
-.cutoff-terrain-blocker { margin: 14px 0; }
+.cutoff-terrain-blocker { margin: 16px 0; }
 .cutoff-sight-line {
   display: block;
   width: 100%;
   max-width: 360px;
-  height: 76px;
+  height: 72px;
   margin-top: 8px;
 }
-.cutoff-blocked-region { fill: #283f35; }
-.cutoff-horizon-line { stroke: #a7bdb2; stroke-width: 1; }
-.cutoff-visible-line { stroke: #b5ebf5; stroke-width: 2; }
-.cutoff-obscured-line { stroke: #f4c599; stroke-width: 2; stroke-dasharray: 5 4; }
-.cutoff-observer { fill: #e2efe8; }
-.cutoff-visible-body { fill: #b5ebf5; }
-.cutoff-obscured-body { fill: #f4c599; }
+.cutoff-blocked-region { fill: #353535; }
+.cutoff-horizon-line { stroke: #999; stroke-width: 1; }
+.cutoff-visible-line { stroke: #f5f5f5; stroke-width: 2; }
+.cutoff-obscured-line { stroke: #cacaca; stroke-width: 2; stroke-dasharray: 5 4; }
+.cutoff-observer, .cutoff-visible-body { fill: #f5f5f5; }
+.cutoff-obscured-body { fill: #353535; stroke: #cacaca; stroke-width: 1.5; }
+
+@media print {
+  .cutoff-terrain time, .cutoff-terrain-reading dt { color: #333; }
+  .cutoff-blocked-region { fill: #e6e6e6; }
+  .cutoff-horizon-line, .cutoff-visible-line, .cutoff-obscured-line { stroke: #333; }
+  .cutoff-observer, .cutoff-visible-body { fill: #333; }
+  .cutoff-obscured-body { fill: #fff; stroke: #333; }
+}

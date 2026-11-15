@@ -1,167 +1,181 @@
-/* Dark glass for structural surfaces, with a brighter edge along the top. */
+:root {
+  --glass-fill: #242424;
+  --glass-edge: rgb(255 255 255 / 19%);
+  --glass-rim: inset 0 1px rgb(255 255 255 / 27%), inset 0 -1px #0005;
+  --glass-shadow: 0 10px 28px #0006;
+  --glass-blur: 22px;
+  --glass-backdrop: none;
+  --glass-light: radial-gradient(ellipse at 28% -140%, #ffffff50, transparent 74%),
+    linear-gradient(166deg, #ffffff14, #ffffff03 65%);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --glass-fill: rgb(27 27 27 / 65%);
+    --glass-backdrop: blur(var(--glass-blur));
+  }
+}
+
 #top {
-  --glass-panel: #1b2a25;
-  --glass-tint: rgb(22 35 31 / 81%);
-  --glass-light: linear-gradient(155deg, #c3f8df24, #c3f8df00 56%);
-  --glass-edge: #759e8b66;
-  --glass-rim: inset 0 1px #d6ffeb36, inset 0 -1px #0004;
-  background:
-    radial-gradient(ellipse 750px 470px at 12% 0, #274236, transparent),
-    radial-gradient(ellipse 620px 420px at 92% 9%, #203238, transparent),
-    #101514;
+  background: radial-gradient(ellipse 56rem 20rem at 50% -4rem, #202020, transparent),
+    var(--app-background);
   display: flow-root;
   min-height: 100dvh;
 }
 
+.glass-surface,
+.glass-button,
 #top .topbar,
 .guided-planner .guide-steps,
-.guided-planner details.area-editor,
-.guided-planner .scene-navigation > button {
-  background: var(--glass-light), var(--glass-panel);
+.guided-planner .area-view-switch,
+.guided-planner :is(.orbital-toolbar, .orbital-timeline),
+.planning-dialog,
+.methods-dialog {
+  background: var(--glass-light), var(--glass-fill);
   border: 1px solid var(--glass-edge);
-  box-shadow: var(--glass-rim), 0 12px 28px #0004;
+  box-shadow: var(--glass-rim), var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+}
+
+.glass-surface,
+.glass-button {
+  border-radius: var(--glass-radius, 999px);
 }
 
 #top .topbar {
-  max-width: 1494px;
-  margin: 12px max(12px, calc((100% - 1494px) / 2)) 0;
-  min-height: 58px;
+  position: sticky;
+  top: 10px;
+  z-index: 8;
+  margin: 10px auto 0;
+  width: min(calc(100% - 24px), 1440px);
+  min-height: 53px;
   height: auto;
-  padding-block: 10px;
-  border-radius: 24px;
+  padding: 8px clamp(14px, 2vw, 24px);
+  border-radius: 19px;
 }
 
-#top .brand-caption { color: #b8cec3; }
+#top .brand-caption { color: var(--text-secondary); }
 
-.guided-planner .guide-data-badge {
-  background: #1c322a;
-  border-color: var(--glass-edge);
-  box-shadow: var(--glass-rim);
+.guided-planner .area-view-switch {
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px;
+  gap: 3px;
+  border-radius: 1.3rem;
+  --glass-shadow: 0 4px 12px #0004;
 }
 
-.guided-planner .guide-steps {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  padding: 5px;
-  border-radius: 20px;
-}
-
-.guided-planner .guide-steps button {
-  align-self: stretch;
-  min-height: 44px;
+.guided-planner .area-view-switch > button {
+  min-height: 40px;
+  padding-inline: 13px;
   border: 1px solid transparent;
-  border-radius: 15px;
-  color: #dceae2;
-  font-weight: 600;
+  border-radius: 1.05rem;
+  background: transparent;
+  color: var(--text-secondary);
 }
 
-.guided-planner .guide-steps button:focus-visible { outline-offset: -3px; }
-.guided-planner .guide-steps button:disabled { opacity: .58; }
-.guided-planner .guide-steps button:hover:not(:disabled):not([aria-current]) {
-  background: #d6ffeb16;
+.guided-planner .area-view-switch > button[aria-pressed="true"] {
+  background: linear-gradient(#f6f6f6, #d6d6d6);
+  border-color: #fff9;
+  color: #131313;
+  box-shadow: inset 0 1px #fffa, 0 2px 5px #0005;
 }
 
-.guided-planner .guide-steps [aria-current="step"] {
-  background: linear-gradient(150deg, #d4f4df, #97c8ad);
-  border-color: #d8ffee;
-  color: #10291e;
-  box-shadow: inset 0 1px #fff9, 0 2px 6px #0004;
+.guided-planner :is(.orbital-toolbar, .orbital-timeline) {
+  --glass-shadow: 0 5px 16px #0004;
 }
 
-.guided-planner details.area-editor { border-radius: 20px; }
-.guided-planner .area-editor > summary > span { color: #b3d3c2; }
+.glass-button:hover:not(:disabled),
+.guided-planner .area-view-switch > button:hover:not([aria-pressed="true"]):not(:disabled) {
+  background-color: #ffffff20;
+  color: var(--text-primary);
+}
 
-.guided-planner .orbital-scene {
+.planning-dialog,
+.methods-dialog {
+  --glass-fill: #202020;
+  --glass-blur: 30px;
+  --glass-shadow: 0 24px 72px #000a;
   border-radius: 22px;
-  box-shadow: 0 14px 38px #0005;
-}
-
-.guided-planner .orbital-scene:is(.immersive, :fullscreen) { border-radius: 0; }
-
-.guided-planner .orbital-toolbar {
-  background: linear-gradient(165deg, #213831, #142320 66%);
-  box-shadow: inset 0 1px #d6ffeb27;
-}
-
-.guided-planner .scene-navigation > button {
-  border-radius: 999px;
-  color: #ecfff3;
-  min-height: 44px;
-}
-
-.guided-planner .scene-navigation > button:hover:not(:disabled):not([aria-pressed="true"]) {
-  background-color: #345448;
-  border-color: #a5d7bc;
 }
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .guided-planner .guide-steps,
-  .guided-planner details.area-editor {
-    background-color: var(--glass-tint);
-    -webkit-backdrop-filter: blur(20px) saturate(135%);
-    backdrop-filter: blur(20px) saturate(135%);
-  }
-
-  .guided-planner .scene-navigation > button:not([aria-pressed="true"]) {
-    background-color: var(--glass-tint);
-    -webkit-backdrop-filter: blur(12px) saturate(145%);
-    backdrop-filter: blur(12px) saturate(145%);
-  }
-
-  .guided-planner .planning-dialog::backdrop {
-    background: #07120dd1;
-    -webkit-backdrop-filter: blur(6px);
-    backdrop-filter: blur(6px);
-  }
+  .planning-dialog,
+  .methods-dialog { --glass-fill: rgb(25 25 25 / 88%); }
 }
 
-.guided-planner .orbital-toolbar button,
-.guided-planner .area-view-switch button,
-.guided-planner .guide-actions :is(.primary-button, .secondary-button),
-.guided-planner .planning-dialog-header button {
-  border-radius: 999px;
-}
-
-.guided-planner .area-view-switch button { min-height: 44px; }
-
-.guided-planner .guide-actions .primary-button {
-  background: linear-gradient(165deg, #d1f7db, #96cbaa);
-  box-shadow: inset 0 1px #fff9, 0 4px 12px #0004;
-}
-
-.guided-planner .guide-actions .primary-button:hover:not(:disabled) {
-  background: linear-gradient(165deg, #e0ffea, #a9dcb9);
-}
-
-.guided-planner .preset-grid button {
-  border-radius: 16px;
-  box-shadow: inset 0 1px #d6ffeb27;
-}
-
-.guided-planner .planning-dialog {
-  background: linear-gradient(155deg, #233831, #131c17 52%);
-  border-radius: 24px;
-  box-shadow: var(--glass-rim), 0 24px 72px #0008;
+.planning-dialog::backdrop,
+.methods-dialog::backdrop {
+  background: #000a;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .guided-planner :is(.guide-steps, .area-view-switch, .scene-navigation, .guide-actions) button {
-    transition: scale 120ms ease-out, background-color 160ms ease, border-color 160ms ease;
+  :is(.primary-button, .secondary-button, .glass-button, .guide-steps button) {
+    transition: scale 140ms ease, background-color 150ms ease, border-color 150ms ease;
   }
 
-  .guided-planner :is(.guide-steps, .area-view-switch, .scene-navigation, .guide-actions) button:active:not(:disabled) {
+  :is(.primary-button, .secondary-button, .glass-button, .guide-steps button):active:not(:disabled) {
     scale: .97;
+    transition-duration: 75ms;
+  }
+
+  :is(.planning-dialog, .methods-dialog)[open] {
+    animation: glass-sheet-in 170ms ease-out;
+  }
+
+  @keyframes glass-sheet-in {
+    from {
+      opacity: .65;
+      scale: .98;
+    }
   }
 }
 
-/* Let the scene grow when the timeline and source controls wrap on phones. */
-@media (max-width: 480px) {
-  .guided-planner .area-layout .area-3d-preview:has(.orbital-scene:not(.immersive)) {
-    height: auto;
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root,
+  .planning-dialog,
+  .methods-dialog {
+    --glass-fill: #222;
+    --glass-edge: #888;
+    --glass-backdrop: none;
+    --glass-light: none;
   }
 
-  .guided-planner .area-layout .orbital-scene:not(.immersive) {
-    height: auto;
-    min-height: 660px;
+  .planning-dialog::backdrop,
+  .methods-dialog::backdrop {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --line: #8c8c8c;
+    --line-strong: #a6a6a6;
+    --text-secondary: #dedede;
+    --text-muted: #cbcbcb;
+  }
+}
+
+@media print {
+  :root {
+    color-scheme: light;
+    --app-background: white;
+    --surface: white;
+    --surface-raised: #f5f5f5;
+    --text-primary: #111;
+    --text-secondary: #272727;
+    --text-muted: #404040;
+    --line: #cfcfcf;
+    --glass-fill: white;
+    --glass-light: none;
+    --glass-backdrop: none;
+    --glass-shadow: 0 0 transparent;
+    --glass-rim: 0 0 transparent;
+  }
+
+  #top { background: white; }
 }

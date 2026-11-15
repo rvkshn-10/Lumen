@@ -5,37 +5,62 @@ import type { CuratedSite } from "../lib/experience-api";
 import { clpsMissions } from "../data/clps-missions";
 import { ClpsMissionDetails, MissionReplay } from "./MissionReplay";
 import { PlanningDialog } from "./PlanningEvidence";
+import { Icon } from "./Icon";
 import { CONNECTING_RIDGE_ID, CraterInspection } from "./CraterInspection";
 import type { LunarFeature } from "../lib/types";
 
 const tour = [
-  ["Pick", "Choose a place on the Moon. Select a prepared polar area to get detailed results."],
-  ["See", "Set a mission window, then find candidate sites. Sunlight and Earth visibility depend on where and when you look."],
-  ["Compare", "Select scenarios on the board to see when sunlight or Earth view changes. Duplicate one to try another date."],
+  ["Choose an area", "Pick a site on the Moon or enter coordinates. Select a prepared polar area for detailed terrain and visibility results."],
+  ["Set the mission", "Choose dates and a ranking priority, then review your mission and find candidate sites."],
+  ["Compare sites", "Select sites to compare. Duplicate a scenario to try another date."],
 ];
-export function ExperienceTools({ audience, onAudience }: { audience: Audience; onAudience: (value: Audience) => void }) {
-  const [panel, setPanel] = useState<"glossary" | "tour" | null>(null);
+export function ExperienceTools({ audience, onAudience, candidateCount }: {
+  audience: Audience; onAudience: (value: Audience) => void; candidateCount?: number;
+}) {
+  const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
-  const [firstVisit, setFirstVisit] = useState(() => localStorage.getItem("lumen-tour-seen") !== "1");
-  function close() {
-    if (panel === "tour") { localStorage.setItem("lumen-tour-seen", "1"); setFirstVisit(false); }
-    setPanel(null);
-  }
-  return <><div className="experience-tools">
-    <label className="field">Audience<select value={audience} onChange={event => onAudience(event.target.value as Audience)}><option>Public</option><option>Educator</option><option>Planner</option></select></label>
-    <button className="text-button" onClick={() => setPanel("glossary")}>Glossary</button>
-    <button className="text-button" onClick={() => { setStep(0); setPanel("tour"); }}>{firstVisit ? "Take the quick tour" : "Quick tour"}</button>
-  </div>{panel && <PlanningDialog title={panel === "tour" ? "Plan a lunar scenario" : "Glossary"} onClose={close}>
-    {panel === "tour" ? <><h3>{tour[step][0]} · {step + 1} of {tour.length}</h3><p>{tour[step][1]}</p><div className="guide-actions">
-      {step > 0 && <button className="secondary-button" onClick={() => setStep(step - 1)}>Previous</button>}
-      <button className="primary-button" onClick={() => step + 1 < tour.length ? setStep(step + 1) : close()}>{step + 1 < tour.length ? "Next" : "Start exploring"}</button>
-    </div></> : <dl className="inspection-facts">
-      <div><dt>Terrain horizon</dt><dd>The skyline formed by hills and ridges as seen from a site.</dd></div>
-      <div><dt>Solar elevation</dt><dd>How high the Sun is in the sky, measured in degrees above level ground.</dd></div>
-      <div><dt>Earthset</dt><dd>When Earth drops behind the terrain from this location.</dd></div>
-      <div><dt>Direct to Earth</dt><dd>A radio path directly from the Moon to Earth. Geometry indicates when a line of sight is possible.</dd></div>
-    </dl>}
-  </PlanningDialog>}</>;
+  return <>
+    <button type="button" className="secondary-button planner-help-trigger" onClick={() => { setStep(0); setOpen(true); }}>
+      <Icon name="info" size={16} /> Help &amp; settings
+    </button>
+    {open && <PlanningDialog title="Help & settings" onClose={() => setOpen(false)}>
+      <div className="planner-help">
+        <label className="field">View mode
+          <select value={audience} onChange={event => onAudience(event.target.value as Audience)}>
+            <option>Public</option><option>Educator</option><option>Planner</option>
+          </select>
+        </label>
+        <details className="advanced-mission">
+          <summary>Quick tour</summary>
+          <div className="tour-current" aria-live="polite">
+            <h3>{tour[step][0]}</h3>
+            <p>{tour[step][1]}</p>
+          </div>
+          <div className="guide-actions">
+            {step > 0 && <button type="button" className="secondary-button" onClick={() => setStep(step - 1)}>Previous</button>}
+            <button type="button" className="primary-button" onClick={() => step + 1 < tour.length ? setStep(step + 1) : setOpen(false)}>
+              {step + 1 < tour.length ? "Next" : "Start exploring"}
+            </button>
+          </div>
+        </details>
+        <details className="advanced-mission">
+          <summary>Glossary</summary>
+          <dl className="inspection-facts">
+            <div><dt>Terrain horizon</dt><dd>The skyline formed by hills and ridges as seen from a site.</dd></div>
+            <div><dt>Solar elevation</dt><dd>How high the Sun is in the sky, measured in degrees above level ground.</dd></div>
+            <div><dt>Earthset</dt><dd>When Earth drops behind the terrain from this location.</dd></div>
+            <div><dt>Direct to Earth</dt><dd>A radio path directly from the Moon to Earth. Geometry indicates when line of sight is possible.</dd></div>
+          </dl>
+        </details>
+        <details className="advanced-mission">
+          <summary>About Lumen</summary>
+          <p>Lumen is a research prototype for lunar mission planning.</p>
+          {candidateCount !== undefined && <p>The current dataset covers {candidateCount.toLocaleString()} detailed polar locations.</p>}
+          <p>Results describe modeled geometry. Assess landing safety and radio performance with mission-specific analysis.</p>
+        </details>
+      </div>
+    </PlanningDialog>}
+  </>;
 }
 
 const placeCategories = [
